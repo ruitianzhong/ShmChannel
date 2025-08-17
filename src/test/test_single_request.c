@@ -60,16 +60,17 @@ int main(int argc, char const* argv[]) {
     sender(chan, request_to_sent);
   } else {
     receiver(chan, request_to_sent);
+
+    // clean up the subprocess
+    int status;
+    pid_t pid = wait(&status);
+    assert(pid != -1);
+    assert(WIFEXITED(status) && WEXITSTATUS(status));
   }
 
   shm_channel_close(chan);
 
   printf("test_single_request PASSED!\n");
 
-  // clean up the subprocess
-  int status;
-  pid_t pid = wait(&status);
-  assert(pid != -1);
-  assert(WIFEXITED(status) && WEXITSTATUS(status));
   exit(EXIT_SUCCESS);
 }

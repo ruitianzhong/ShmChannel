@@ -80,13 +80,14 @@ int main(int argc, char const *argv[]) {
     sender(chan, num_requests, batch_size);
   } else {
     receiver(chan, num_requests, batch_size);
+    int status;
+    pid_t pid = wait(&status);
+    assert(pid != -1);
+    assert(WIFEXITED(status) && WEXITSTATUS(status));
   }
 
   shm_channel_close(chan);
   // clean up the subprocess
-  int status;
-  pid_t pid = wait(&status);
-  assert(pid != -1);
-  assert(WIFEXITED(status) && WEXITSTATUS(status));
+
   exit(EXIT_SUCCESS);
 }
