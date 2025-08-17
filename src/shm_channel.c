@@ -69,7 +69,7 @@ void shm_channel_close(shm_channel* chan) {
   return;
 }
 // trust the caller and do not perform any check
-int shm_channel_send_burst(shm_channel* chan, task_descriptor** send_descs,
+int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,
                            int num_descriptors) {
   ring_queue* rq = chan->ring_queue;
 
@@ -82,7 +82,7 @@ int shm_channel_send_burst(shm_channel* chan, task_descriptor** send_descs,
 
   for (int i = 0; i < num_descriptors && i < available_slots;
        i++, num_descriptors++) {
-    memcpy(&rq->ring_queue_region[tail_idx], send_descs[i],
+    memcpy(&rq->ring_queue_region[tail_idx], &send_descs[i],
            sizeof(task_descriptor));
     tail_idx = (tail_idx + 1) % (rq->q_depth + 1);
   }
@@ -96,7 +96,7 @@ int shm_channel_send_burst(shm_channel* chan, task_descriptor** send_descs,
   return num_sent_descs;
 }
 // trust the caller and do not perform any check
-int shm_channel_recv_burst(shm_channel* chan, task_descriptor** recv_descs,
+int shm_channel_recv_burst(shm_channel* chan, task_descriptor* recv_descs,
                            int num_descriptor) {
   int num_recv_descs = 0;
 
@@ -108,7 +108,7 @@ int shm_channel_recv_burst(shm_channel* chan, task_descriptor** recv_descs,
 
   for (int i = 0; i < num_descriptor && i < available_slot_to_recv;
        i++, num_recv_descs++) {
-    memcpy(recv_descs[i], (void*)&rq->ring_queue_region[head_idx],
+    memcpy(&recv_descs[i], (void*)&rq->ring_queue_region[head_idx],
            sizeof(task_descriptor));
     head_idx = (head_idx + 1) % (rq->q_depth + 1);
   }
@@ -118,4 +118,15 @@ int shm_channel_recv_burst(shm_channel* chan, task_descriptor** recv_descs,
   rq->head_idx = head_idx;
 
   return num_recv_descs;
+}
+
+int shm_channel_free_count(shm_channel* chan) {
+  ring_queue* rq = chan->ring_queue;
+  return rq->q_depth -
+         (rq->tail_idx - rq->head_idx + rq->q_depth + 1) % (rq->q_depth + 1);
+}
+
+int shm_channel_used_count(shm_channel* chan) {
+  ring_queue* rq = chan->ring_queue;
+  return (rq->tail_idx - rq->head_idx + rq->q_depth + 1) % (rq->q_depth + 1);
 }

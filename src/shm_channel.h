@@ -44,10 +44,14 @@ shm_channel* shm_channel_open(int q_depth);
 
 void shm_channel_close(shm_channel*);
 
-int shm_channel_send_burst(shm_channel* chan, task_descriptor** send_descs,
+int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,
                            int num_descriptors);
 
-int shm_channel_recv_burst(shm_channel* chan, task_descriptor** recv_descs,
+int shm_channel_recv_burst(shm_channel* chan, task_descriptor* recv_descs,
                            int num_descriptor);
+
+int shm_channel_free_count(shm_channel* chan);
+
+int shm_channel_used_count(shm_channel* chan);
 
 #endif
