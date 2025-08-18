@@ -300,7 +300,7 @@ int main(int argc, char const *argv[]) {
     int status;
     pid_t pid = wait(&status);
     assert(pid != -1);
-    assert(WIFEXITED(status) && WEXITSTATUS(status));
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
   } else {
     receiver(ep);
   }

@@ -17,7 +17,7 @@ void sender(shm_channel *chan, int num_requests, int batch_size) {
   while (sent < num_requests) {
     if (sent > 0) {
       for (int i = 0; i < batch_size; i++) {
-        batch[i].magic++;
+        batch[i].magic += batch_size;
       }
     }
 
@@ -30,8 +30,10 @@ void sender(shm_channel *chan, int num_requests, int batch_size) {
       int ret = shm_channel_send_burst(chan, &batch[batch_sent],
                                        current_batch_size - batch_sent);
       batch_sent += ret;
+      sent += ret;
     }
-    }
+    assert(batch_sent == current_batch_size);
+  }
 
   free(batch);
   return;
@@ -46,10 +48,20 @@ void receiver(shm_channel *chan, int num_requests, int batch_size) {
                                  ? batch_size
                                  : (num_requests - received);
 
-    int ret = shm_channel_recv_burst(chan, &batch[0], current_batch_size);
+    int offset = 0;
 
-    received += ret;
-    for (int i = 0; i < ret; i++) {
+    do {
+      int ret = shm_channel_recv_burst(chan, &batch[offset],
+                                       current_batch_size - offset);
+      offset += ret;
+      received += ret;
+    } while (offset < current_batch_size);
+
+    for (int i = 0; i < current_batch_size; i++) {
+      if (batch[i].magic!=expect_magic){
+        printf("%d %d i=%d received=%d cur_bs=%d\n", batch[i].magic, expect_magic, i,
+               received, current_batch_size);
+      }
       assert(batch[i].magic == expect_magic);
       expect_magic++;
     }
@@ -59,10 +71,10 @@ void receiver(shm_channel *chan, int num_requests, int batch_size) {
 
   return;
 }
-
+/*
+Command line: ./test_burst_request.c [q_depth] [batch_size] [num_requests]
+*/
 int main(int argc, char const *argv[]) {
-  printf("test_burst_request PASSED\n");
-
   int q_depth, batch_size, num_requests;
   assert(argc == 4);
   q_depth = atoi(argv[1]);
@@ -83,11 +95,16 @@ int main(int argc, char const *argv[]) {
     int status;
     pid_t pid = wait(&status);
     assert(pid != -1);
-    assert(WIFEXITED(status) && WEXITSTATUS(status));
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
   }
 
   shm_channel_close(chan);
   // clean up the subprocess
-
+  if (ret) {
+    printf(
+        "[PASSED] test_burst_request: q_depth=%d batch_size=%d "
+        "num_requests=%d\n",
+        q_depth, batch_size, num_requests);
+  }
   exit(EXIT_SUCCESS);
 }

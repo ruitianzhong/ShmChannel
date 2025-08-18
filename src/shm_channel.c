@@ -48,6 +48,7 @@ shm_channel* shm_channel_open(int q_depth) {
     perror("ring_queue_region mmap failed");
     return NULL;
   }
+  chan->ring_queue = ring_queue;
 
   return chan;
 }
@@ -81,7 +82,7 @@ int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,
       rq->q_depth - (tail_idx - head_idx + rq->q_depth + 1) % (rq->q_depth + 1);
 
   for (int i = 0; i < num_descriptors && i < available_slots;
-       i++, num_descriptors++) {
+       i++, num_sent_descs++) {
     memcpy(&rq->ring_queue_region[tail_idx], &send_descs[i],
            sizeof(task_descriptor));
     tail_idx = (tail_idx + 1) % (rq->q_depth + 1);

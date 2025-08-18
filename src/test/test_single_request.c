@@ -39,7 +39,9 @@ void receiver(shm_channel* chan, int num_requests) {
   assert(shm_channel_free_count(chan) == chan->ring_queue->q_depth);
   assert(shm_channel_used_count(chan) == 0);
 }
-
+/*
+Command line: ./test_single_request [q_depth] [num_total_request]
+*/
 int main(int argc, char const* argv[]) {
   assert(argc == 3);
 
@@ -48,7 +50,7 @@ int main(int argc, char const* argv[]) {
 
   assert(q_depth > 0 && request_to_sent >= 0);
 
-  shm_channel* chan = shm_channel_open(8);
+  shm_channel* chan = shm_channel_open(q_depth);
 
   assert(chan != NULL);
 
@@ -65,12 +67,14 @@ int main(int argc, char const* argv[]) {
     int status;
     pid_t pid = wait(&status);
     assert(pid != -1);
-    assert(WIFEXITED(status) && WEXITSTATUS(status));
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
   }
 
   shm_channel_close(chan);
-
-  printf("test_single_request PASSED!\n");
+  if (ret) {
+    printf("[PASSED] test_single_request: q_depth=%d total_requests=%d\n",
+           q_depth, request_to_sent);
+  }
 
   exit(EXIT_SUCCESS);
 }
