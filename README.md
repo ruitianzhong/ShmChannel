@@ -40,4 +40,6 @@ cd build
 ./send_recv --pcap-file-path packet.pcap --pps 20000 --queue-depth 1024 --batch-size 32 --loop-time 100
 # pps is set
 ./send_recv --pcap-file-path packet.pcap --pps 1024 --queue-depth 1024 --batch-size 32 --loop-time 5
+# Enable CPU binding
+./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 1000000 --sender-cpu 0 --recv-cpu 1
 ```

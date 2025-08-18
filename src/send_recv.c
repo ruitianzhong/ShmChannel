@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <linux/limits.h>
 #include <pcap.h>
+#include <sched.h>
 #include <shm_channel.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -207,6 +208,18 @@ uint64_t calculate_batch_interval_ns(int batch_size, int pps) {
   return interval_ns;
 }
 
+void set_cpu_affinity(int cpuid) {
+  cpu_set_t cpu_set;
+  CPU_ZERO(&cpu_set);
+  CPU_SET(cpuid, &cpu_set);
+  if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set) < 0) {
+    perror("sched_setaffinity");
+    exit(EXIT_FAILURE);
+  }
+
+  return;
+}
+
 static inline void busy_wait(uint64_t ns) {
   if (ns == 0) {
     return;
@@ -232,13 +245,16 @@ static inline void busy_wait(uint64_t ns) {
 }
 
 void sender(endpoint *ep) {
-  int  batch_size = g_config.batch_size;
+  if (g_config.sender_cpu_id != -1) {
+    printf("sender bind cpu %d\n", g_config.sender_cpu_id);
+    set_cpu_affinity(g_config.sender_cpu_id);
+  }
+
+  int batch_size = g_config.batch_size;
 
   task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
   uint64_t wait_ns = calculate_batch_interval_ns(batch_size, g_config.send_pps);
-
-  printf("wait ns is %ld\n", wait_ns);
 
   assert(batch != NULL);
 
@@ -280,6 +296,12 @@ void sender(endpoint *ep) {
 }
 
 void receiver(endpoint *ep) {
+  if (g_config.receiver_cpu_id != -1) {
+    printf("receiver bind cpu %d\n", g_config.sender_cpu_id);
+
+    set_cpu_affinity(g_config.receiver_cpu_id);
+  }
+
   task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
   assert(batch != NULL);
