@@ -1,0 +1,29 @@
+name: Autogr
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+jobs:
+  autograde:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # More detail in README.md
+      - name: Install Dependencies
+        run: |
+            sudo apt update
+            sudo apt install -y libpcap-dev cmake
+            pip install scapy matplotlib pytest
+      - name: Build & Testing
+        run: |
+             mkdir ${{ github.workspace }}/build && cd ${{ github.workspace }}/build 
+             cmake ..
+             make
+             ./script/test_shm_channel.py
+             ./script/pcap_packet_gen.py --packet-num=1024 --filename=packet.pcap
+             ./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 1000000
+
+
+
