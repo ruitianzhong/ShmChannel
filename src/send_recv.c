@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <wait.h>
 
 struct config {
   // packet per second
@@ -23,20 +24,26 @@ struct config {
   // ring queue depth
   int q_depth;
   // sender core affinity mask
-  uint64_t sender_affinity_mask;
+  int sender_cpu_id;
   // receiver core affinity mask
-  uint64_t receiver_affinity_mask;
+  int receiver_cpu_id;
   // batch_size
   int batch_size;
+  // loop time
+  int loop_time;
+  // sanity check flag
+  int sanity_check;
 };
 
 struct config g_config = {
-    .send_pps = 100,
-    .elapsed_second = 5,
+    .send_pps = 0,
     .max_sent_packet_number = -1,
     .pcap_file_path = "packet.pcap",
     .q_depth = 128,
-    .sender_affinity_mask = 0,
+    .batch_size = 32,
+    .loop_time = 10,
+    .sender_cpu_id = -1,
+    .receiver_cpu_id = -1,
 };
 
 struct packet_info {
@@ -65,10 +72,10 @@ void load_pcap_packet(endpoint *ep) {
     printf("Failed to open pcap file: %s\n", err_buf);
     exit(EXIT_FAILURE);
   }
-  char *packet;
+  const u_char *packet;
   struct pcap_pkthdr pkthdr;
 
-  while (packet = pcap_next(handle, &pkthdr)) {
+  while ((packet = pcap_next(handle, &pkthdr)) != NULL) {
     packet_cnt++;
     // actually catured
     byte_cnt += pkthdr.caplen;
@@ -97,10 +104,10 @@ void load_pcap_packet(endpoint *ep) {
   }
 
   int idx = 0;
-  char *cur_addr = memory_region;
+  void *cur_addr = memory_region;
 
-  while (packet = pcap_next(handle, &pkthdr)) {
-    assert(cur_addr + pkthdr.caplen < memory_region + byte_cnt);
+  while ((packet = pcap_next(handle, &pkthdr)) != NULL) {
+    assert(cur_addr + pkthdr.caplen <= memory_region + byte_cnt);
     memcpy(cur_addr, packet, pkthdr.caplen);
     info[idx].addr = cur_addr;
     info[idx].len = pkthdr.caplen;
@@ -130,6 +137,8 @@ endpoint *endpoint_create() {
     return NULL;
   }
 
+  load_pcap_packet(ep);
+
   return ep;
 }
 
@@ -143,7 +152,7 @@ void endpoint_free(endpoint *ep) {
   free(ep);
 }
 
-int parse_cli_option(int argc, char const *argv[]) {
+void parse_cli_option(int argc, char const *argv[]) {
   if (argc == 1) {
     return;
   }
@@ -172,11 +181,14 @@ int parse_cli_option(int argc, char const *argv[]) {
     } else if (strcmp(argv[idx], "--batch-size") == 0 && idx + 1 < argc) {
       g_config.batch_size = atoi(argv[idx + 1]);
       idx += 2;
-    } else if (strcmp(argv[idx], "--sender-mask") == 0 && idx + 1 < argc) {
-      g_config.sender_affinity_mask = atoi(argv[idx + 1]);
+    } else if (strcmp(argv[idx], "--sender-cpu") == 0 && idx + 1 < argc) {
+      g_config.sender_cpu_id = atoi(argv[idx + 1]);
       idx += 2;
-    } else if (strcmp(argv[idx], "--recv-mask") == 0 && idx + 1 < argc) {
-      g_config.receiver_affinity_mask = atoi(argv[idx + 1]);
+    } else if (strcmp(argv[idx], "--recv-cpu") == 0 && idx + 1 < argc) {
+      g_config.receiver_cpu_id = atoi(argv[idx + 1]);
+      idx += 2;
+    } else if (strcmp(argv[idx], "--loop-time") == 0 && idx + 1 < argc) {
+      g_config.loop_time = atoi(argv[idx + 1]);
       idx += 2;
     } else {
       printf("wrong option %s\n", argv[idx]);
@@ -186,12 +198,20 @@ int parse_cli_option(int argc, char const *argv[]) {
 }
 
 uint64_t calculate_batch_interval_ns(int batch_size, int pps) {
+  if (pps == 0) {
+    return 0;
+  }
+
   uint64_t ns_per_second = 1e9;
   uint64_t interval_ns = (ns_per_second / pps) * batch_size;
   return interval_ns;
 }
 
-void busy_wait(uint64_t ns) {
+static inline void busy_wait(uint64_t ns) {
+  if (ns == 0) {
+    return;
+  }
+
   struct timespec start, end;
 
   if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
@@ -212,36 +232,50 @@ void busy_wait(uint64_t ns) {
 }
 
 void sender(endpoint *ep) {
-  int sent = 0, batch_size = g_config.batch_size;
+  int  batch_size = g_config.batch_size;
 
   task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
   uint64_t wait_ns = calculate_batch_interval_ns(batch_size, g_config.send_pps);
 
+  printf("wait ns is %ld\n", wait_ns);
+
   assert(batch != NULL);
 
-  while (sent < ep->packet_cnt) {
-    int current_batch =
-        batch_size < (ep->packet_cnt - sent) ? batch_size : (ep->packet_cnt);
+  for (int iter = 0; iter < g_config.loop_time; iter++) {
+    int sent = 0;
+    while (sent < ep->packet_cnt) {
+      for (int j = 0; j < batch_size; j++) {
+        if (sent == 0) {
+          batch[j].magic = j;
+        } else {
+          batch[j].magic += batch_size;
+        }
+      }
 
-    // replenish the packet
+      int current_batch = batch_size < (ep->packet_cnt - sent)
+                              ? batch_size
+                              : (ep->packet_cnt - sent);
 
-    for (int i = 0; i < current_batch; i++) {
-      batch[i].len = ep->packet_info[i + sent].len;
-      batch[i].start_addr = ep->packet_info[i + sent].addr;
+      // replenish the packet
+
+      for (int i = 0; i < current_batch; i++) {
+        batch[i].len = ep->packet_info[i + sent].len;
+        batch[i].start_addr = ep->packet_info[i + sent].addr;
+      }
+
+      int idx = 0;
+
+      while (idx < current_batch) {
+        int ret =
+            shm_channel_send_burst(ep->chan, &batch[idx], current_batch - idx);
+
+        idx += ret;
+        sent += ret;
+      }
+
+      busy_wait(wait_ns);
     }
-
-    task_descriptor *batch_ptr = batch;
-
-    while (current_batch) {
-      int ret = shm_channel_send_burst(ep->chan, batch_ptr, current_batch);
-
-      current_batch -= ret;
-      batch_ptr += ret;
-      sent += ret;
-    }
-
-    busy_wait(wait_ns);
   }
 }
 
@@ -250,9 +284,9 @@ void receiver(endpoint *ep) {
 
   assert(batch != NULL);
 
-  int total_recv = 0;
+  uint64_t total_recv = 0;
 
-  int recv = 0, bs = g_config.batch_size;
+  int bs = g_config.batch_size;
 
   struct timespec start, end;
 
@@ -260,14 +294,21 @@ void receiver(endpoint *ep) {
     perror("receiver clock_gettime");
     exit(EXIT_FAILURE);
   }
+  for (int iter = 0; iter < g_config.loop_time; iter++) {
+    int expect_magic = 0, recv = 0;
+    while (recv < ep->packet_cnt) {
+      int current_bs =
+          bs < (ep->packet_cnt - recv) ? bs : (ep->packet_cnt - recv);
 
-  while (recv < ep->packet_cnt) {
-    int current_bs =
-        bs < (ep->packet_cnt - recv) ? bs : (ep->packet_cnt - recv);
-
-    int ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
-    recv += ret;
-    total_recv += ret;
+      int ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
+      recv += ret;
+      total_recv += ret;
+      // sanity check
+      for (int i = 0; i < ret; i++) {
+        assert(batch[i].magic == expect_magic);
+        expect_magic++;
+      }
+    }
   }
 
   if (clock_gettime(CLOCK_MONOTONIC, &end) == -1) {
@@ -277,10 +318,8 @@ void receiver(endpoint *ep) {
 
   uint64_t ns_elapsed =
       (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-
   double receive_pps = (double)(1e9 * total_recv) / (double)ns_elapsed;
-
-  printf("receive pps= %.2f\n", receive_pps);
+  printf("receive pps=%.2f kpps=%.2f\n", receive_pps, receive_pps / 1000.0);
 }
 
 int main(int argc, char const *argv[]) {
@@ -296,13 +335,12 @@ int main(int argc, char const *argv[]) {
 
   if (ret == 0) {
     sender(ep);
-
+  } else {
+    receiver(ep);
     int status;
     pid_t pid = wait(&status);
     assert(pid != -1);
     assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
-  } else {
-    receiver(ep);
   }
 
   endpoint_free(ep);

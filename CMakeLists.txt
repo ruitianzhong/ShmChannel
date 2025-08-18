@@ -22,8 +22,6 @@ set(MAIN_SOURCES
     ${SHM_CHANNEL_SOURCES}
 )
 
-message(${MAIN_SOURCES})
-
 # include_directories(include)
 
 # add_executable(myapp ${SOURCES})
@@ -40,8 +38,6 @@ add_executable(test_burst_request ./src/test/test_burst_request.c
 add_executable(test_single_request ./src/test/test_single_request.c
                 ${SHM_CHANNEL_SOURCES})
 
-# add_executable(send_recv ./src/send_recv.c ${SHM_CHANNEL_SOURCES})
+add_executable(send_recv ./src/send_recv.c ${SHM_CHANNEL_SOURCES})
 
-# target_link_libraries(send_recv PRIVATE ${PCAP_LIB})
-
-# target_link_libraries(myapp m)
+target_link_libraries(send_recv PRIVATE ${PCAP_LIB})

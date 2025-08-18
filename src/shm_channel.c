@@ -43,7 +43,8 @@ shm_channel* shm_channel_open(int q_depth) {
            PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
 
   if (NULL == ring_queue->ring_queue_region) {
-    munmap(ring_queue, sizeof(ring_queue));
+    int ret = munmap(ring_queue, sizeof(ring_queue));
+    assert(ret == 0);
     free(chan);
     perror("ring_queue_region mmap failed");
     return NULL;
