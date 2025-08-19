@@ -1,7 +1,9 @@
 #define _GNU_SOURCE
+#include <arpa/inet.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <netinet/in.h>
 #include <pcap.h>
 #include <sched.h>
 #include <shm_channel.h>
@@ -12,6 +14,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <wait.h>
+
+#define MAKE_IP_ADDR(a, b, c, d) \
+  (((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d)
 
 struct config {
   // packet per second
@@ -34,6 +39,8 @@ struct config {
   int loop_time;
   // sanity check flag
   int sanity_check;
+  // enable rewriting
+  int enable_ip_rewrite;
 };
 
 struct config g_config = {
@@ -45,6 +52,7 @@ struct config g_config = {
     .loop_time = 10,
     .sender_cpu_id = -1,
     .receiver_cpu_id = -1,
+    .enable_ip_rewrite = 0,
 };
 
 struct packet_info {
@@ -83,6 +91,14 @@ void load_pcap_packet(endpoint *ep) {
   }
 
   pcap_close(handle);
+
+  if (g_config.enable_ip_rewrite) {
+    // ensure that we can safely rewrite IP header
+    if (packet_cnt < g_config.batch_size * 2 + g_config.q_depth) {
+      printf("packet number is too small\n");
+      exit(EXIT_FAILURE);
+    }
+  }
 
   void *memory_region = mmap(NULL, byte_cnt, PROT_READ | PROT_WRITE,
                              MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -191,6 +207,10 @@ void parse_cli_option(int argc, char const *argv[]) {
     } else if (strcmp(argv[idx], "--loop-time") == 0 && idx + 1 < argc) {
       g_config.loop_time = atoi(argv[idx + 1]);
       idx += 2;
+    } else if (strcmp(argv[idx], "--enable-ip-rewrite") == 0 &&
+               idx + 1 < argc) {
+      g_config.enable_ip_rewrite = atoi(argv[idx + 1]);
+      idx += 2;
     } else {
       printf("wrong option %s\n", argv[idx]);
       exit(EXIT_FAILURE);
@@ -206,6 +226,20 @@ uint64_t calculate_batch_interval_ns(int batch_size, int pps) {
   uint64_t ns_per_second = 1e9;
   uint64_t interval_ns = (ns_per_second / pps) * batch_size;
   return interval_ns;
+}
+
+void rewrite_src_ip(u_char *pkt, int pkt_len) {
+  if (pkt_len < 30) {
+    return;
+  }
+  // ipv4 src ip
+  uint32_t *src = (uint32_t *)(pkt + 26);
+  // get the deterministic result for each flow
+  // srand(*src); // high overhead, not use it.
+  // can be improved with better strategy
+  *src = (*src) + 1;
+
+  return;
 }
 
 void set_cpu_affinity(int cpuid) {
@@ -278,6 +312,9 @@ void sender(endpoint *ep) {
       for (int i = 0; i < current_batch; i++) {
         batch[i].len = ep->packet_info[i + sent].len;
         batch[i].start_addr = ep->packet_info[i + sent].addr;
+        if (sent && g_config.enable_ip_rewrite) {
+          rewrite_src_ip(batch[i].start_addr, batch[i].len);
+        }
       }
 
       int idx = 0;

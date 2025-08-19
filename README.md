@@ -36,13 +36,28 @@ Run the send-recv app:
 ```bash
 cd build
 # generate packet.pcap 
-./script/pcap_packet_gen.py --packet-num=1024 --filename=packet.pcap
+./script/pcap_packet_gen.py --packet-num=4096 --filename=packet.pcap
 # pps is unlimited
-./send_recv --pcap-file-path packet.pcap --pps 0 --queue-depth 1024 --batch-size 32 --loop-time 100000
+./send_recv --pcap-file-path packet.pcap --pps 0 --queue-depth 1024 --batch-size 32 --loop-time 1000
 # pps is set
 ./send_recv --pcap-file-path packet.pcap --pps 20000 --queue-depth 1024 --batch-size 32 --loop-time 100
 # pps is set
 ./send_recv --pcap-file-path packet.pcap --pps 1024 --queue-depth 1024 --batch-size 32 --loop-time 5
 # Enable CPU binding
-./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 1000000 --sender-cpu 0 --recv-cpu 1
+./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 100000 --sender-cpu 0 --recv-cpu 1 --enable-ip-rewrite 1
 ```
+
+
+## ShmChannel API
+
++ `shm_channel* shm_channel_open(int q_depth)`
+
++ `void shm_channel_close(shm_channel*)`
+
+`int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,int num_descriptors)`
+
+`int shm_channel_recv_burst(shm_channel* chan, task_descriptor* recv_descs, int num_descriptor)`
+
+`int shm_channel_free_count(shm_channel* chan)`
+
+`int shm_channel_used_count(shm_channel* chan)`
