@@ -1,4 +1,4 @@
-name: Autogr
+name: ShmChannel Build & Test
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
 jobs:
-  autograde:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
              cmake ..
              make
              ./script/test_shm_channel.py
-             ./script/pcap_packet_gen.py --packet-num=1024 --filename=packet.pcap
+             ./script/pcap_packet_gen.py --packet-num=4096 --filename=packet.pcap
              ./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 100000
               ./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 100000 --enable-ip-rewrite 1
 
