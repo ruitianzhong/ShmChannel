@@ -1,10 +1,9 @@
-#!/bin/python
 import argparse
 from scapy.layers.inet import IP, UDP, TCP
 from scapy.layers.http import HTTPRequest, HTTP
 from scapy.layers.l2 import Ether
 import random
-from scapy.utils import wrpcap
+from scapy.utils import wrpcap, rdpcap
 
 
 SRC_MAC = "6C:B3:11:50:D3:DA"
@@ -78,7 +77,21 @@ def generate_packet_from_template_flow(pkts, num_flows):
 if __name__ == "__main__":
     random.seed(42)
     parser = argparse.ArgumentParser("transform_pcap")
-    template = generate_single_flow_template_pcap()
-    wrpcap("template.pcap", template)
-    result = generate_packet_from_template_flow(template, num_flows=4)
-    wrpcap('transform.pcap', result)
+    parser.add_argument("--template",
+                        help="pcap file name of the template flow", type=str, default=None)
+    parser.add_argument(
+        "--num-flow", help="number of the flow in the generated pcap", type=int, default=4)
+    parser.add_argument(
+        "--output", help="output file name", default="transformed.pcap", type=str
+    )
+
+    args = parser.parse_args()
+    if args.template != None:
+        template = rdpcap(args.template)
+        wrpcap("template.pcap", template)
+    else:
+        template = generate_single_flow_template_pcap()
+   
+    result = generate_packet_from_template_flow(
+        template, num_flows=args.num_flow)
+    wrpcap(args.output, result)

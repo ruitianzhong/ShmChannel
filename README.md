@@ -54,10 +54,19 @@ cd build
 
 + `void shm_channel_close(shm_channel*)`
 
-`int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,int num_descriptors)`
++ `int shm_channel_send_burst(shm_channel* chan, task_descriptor* send_descs,int num_descriptors)`
 
-`int shm_channel_recv_burst(shm_channel* chan, task_descriptor* recv_descs, int num_descriptor)`
+PARAM: num_descriptors: maximum send descriptors
 
-`int shm_channel_free_count(shm_channel* chan)`
+RETURN VALUE: This function return the number of descriptors sent successfully.
 
-`int shm_channel_used_count(shm_channel* chan)`
++ `int shm_channel_recv_burst(shm_channel* chan, task_descriptor* recv_descs, int num_descriptor)`
+
+PARAM: num_descriptors: maximum received descriptors
+
+RETURN VALUE: This function return the number of descriptors received successfully.
+
++ `int shm_channel_free_count(shm_channel* chan)`
+
+
++ `int shm_channel_used_count(shm_channel* chan)`
