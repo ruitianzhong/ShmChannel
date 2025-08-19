@@ -101,6 +101,40 @@ void load_pcap_packet(endpoint *ep) {
   ep->packet_cnt = packet_cnt;
 }
 
+void debug_pcap(endpoint *ep) {
+  int debug_pkt = ep->packet_cnt > 10 ? 10 : ep->packet_cnt;
+  pcap_t *pcap_handle;
+  pcap_dumper_t *dumper;
+  // max packet length 65535
+  pcap_handle = pcap_open_dead(DLT_EN10MB, 65535);
+  if (pcap_handle == NULL) {
+    fprintf(stderr, "cannot create pcap handle\n");
+    exit(EXIT_FAILURE);
+  }
+
+  dumper = pcap_dump_open(pcap_handle, "debug.pcap");
+  if (dumper == NULL) {
+    fprintf(stderr, "can not open %s\n", pcap_geterr(pcap_handle));
+    pcap_close(pcap_handle);
+    exit(EXIT_FAILURE);
+  }
+
+  for (int i = 0; i < debug_pkt; i++) {
+    struct pcap_pkthdr header;
+
+    header.caplen = ep->packet_info[i].len;
+    header.len = header.caplen;
+
+    pcap_dump((unsigned char *)dumper, &header,
+              (unsigned char *)ep->packet_info[i].addr);
+  }
+
+  pcap_dump_close(dumper);
+  pcap_close(pcap_handle);
+  printf("debug end\n");
+  return;
+}
+
 endpoint *endpoint_create() {
   endpoint *ep = (endpoint *)calloc(sizeof(endpoint), 1);
 
