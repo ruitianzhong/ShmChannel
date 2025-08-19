@@ -38,7 +38,7 @@ add_executable(test_burst_request ./src/test/test_burst_request.c
 add_executable(test_single_request ./src/test/test_single_request.c
                 ${SHM_CHANNEL_SOURCES})
 
-add_executable(send_recv ./src/send_recv.c ${SHM_CHANNEL_SOURCES})
+add_executable(send_recv ./src/example.c ./src/send_recv.c ${CMAKE_SOURCE_DIR}/src/send_recv.h ${SHM_CHANNEL_SOURCES})
 
 target_link_libraries(send_recv PRIVATE ${PCAP_LIB})
 

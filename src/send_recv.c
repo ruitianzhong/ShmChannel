@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <pcap.h>
 #include <sched.h>
+#include <send_recv.h>
 #include <shm_channel.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,34 +15,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <wait.h>
-
-#define MAKE_IP_ADDR(a, b, c, d) \
-  (((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d)
-
-struct config {
-  // packet per second
-  int send_pps;
-  // total time
-  int elapsed_second;
-  //  max sent packet number
-  int max_sent_packet_number;
-  // pcap file path
-  char *pcap_file_path;
-  // ring queue depth
-  int q_depth;
-  // sender core affinity mask
-  int sender_cpu_id;
-  // receiver core affinity mask
-  int receiver_cpu_id;
-  // batch_size
-  int batch_size;
-  // loop time
-  int loop_time;
-  // sanity check flag
-  int sanity_check;
-  // enable rewriting
-  int enable_ip_rewrite;
-};
 
 struct config g_config = {
     .send_pps = 0,
@@ -55,20 +28,8 @@ struct config g_config = {
     .enable_ip_rewrite = 0,
 };
 
-struct packet_info {
-  char *addr;
-  int len;
-};
-
-struct endpoint {
-  shm_channel *chan;
-  void *data_region;
-  int data_region_length;
-  struct packet_info *packet_info;
-  int packet_cnt;
-};
-
-typedef struct endpoint endpoint;
+#define MAKE_IP_ADDR(a, b, c, d) \
+  (((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d)
 
 void load_pcap_packet(endpoint *ep) {
   int packet_cnt = 0, byte_cnt = 0;
@@ -148,6 +109,7 @@ endpoint *endpoint_create() {
   }
 
   ep->chan = shm_channel_open(g_config.q_depth);
+  ep->send_proc_pid = 0;
 
   if (NULL == ep->chan) {
     free(ep);
@@ -167,55 +129,6 @@ void endpoint_free(endpoint *ep) {
   free(ep->packet_info);
   shm_channel_close(ep->chan);
   free(ep);
-}
-
-void parse_cli_option(int argc, char const *argv[]) {
-  if (argc == 1) {
-    return;
-  }
-  int idx = 1;
-  while (idx < argc) {
-    if (strncmp(argv[idx], "--pcap-file-path", 17) == 0 && idx + 1 < argc) {
-      g_config.pcap_file_path = calloc(strlen(argv[idx + 1]) + 1, sizeof(char));
-
-      assert(g_config.pcap_file_path != NULL);
-      strncpy(g_config.pcap_file_path, argv[idx + 1], strlen(argv[idx + 1]));
-      idx += 2;
-    } else if (strncmp(argv[idx], "--pps", 6) == 0 && idx + 1 < argc) {
-      g_config.send_pps = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strncmp(argv[idx], "--elapsed-second", 17) == 0 &&
-               idx + 1 < argc) {
-      g_config.elapsed_second = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strncmp(argv[idx], "--max_sent_packet_number", 25) == 0 &&
-               idx + 1 < argc) {
-      g_config.elapsed_second = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strncmp(argv[idx], "--queue-depth", 14) == 0 && idx + 1 < argc) {
-      g_config.q_depth = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strcmp(argv[idx], "--batch-size") == 0 && idx + 1 < argc) {
-      g_config.batch_size = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strcmp(argv[idx], "--sender-cpu") == 0 && idx + 1 < argc) {
-      g_config.sender_cpu_id = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strcmp(argv[idx], "--recv-cpu") == 0 && idx + 1 < argc) {
-      g_config.receiver_cpu_id = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strcmp(argv[idx], "--loop-time") == 0 && idx + 1 < argc) {
-      g_config.loop_time = atoi(argv[idx + 1]);
-      idx += 2;
-    } else if (strcmp(argv[idx], "--enable-ip-rewrite") == 0 &&
-               idx + 1 < argc) {
-      g_config.enable_ip_rewrite = atoi(argv[idx + 1]);
-      idx += 2;
-    } else {
-      printf("wrong option %s\n", argv[idx]);
-      exit(EXIT_FAILURE);
-    }
-  }
 }
 
 uint64_t calculate_batch_interval_ns(int batch_size, int pps) {
@@ -279,11 +192,7 @@ static inline void busy_wait(uint64_t ns) {
 }
 
 void sender(endpoint *ep) {
-  if (g_config.sender_cpu_id != -1) {
-    printf("sender bind cpu %d\n", g_config.sender_cpu_id);
-    set_cpu_affinity(g_config.sender_cpu_id);
-  }
-
+ 
   int batch_size = g_config.batch_size;
 
   task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
@@ -306,9 +215,7 @@ void sender(endpoint *ep) {
       int current_batch = batch_size < (ep->packet_cnt - sent)
                               ? batch_size
                               : (ep->packet_cnt - sent);
-
       // replenish the packet
-
       for (int i = 0; i < current_batch; i++) {
         batch[i].len = ep->packet_info[i + sent].len;
         batch[i].start_addr = ep->packet_info[i + sent].addr;
@@ -332,76 +239,38 @@ void sender(endpoint *ep) {
   }
 }
 
-void receiver(endpoint *ep) {
-  if (g_config.receiver_cpu_id != -1) {
-    printf("receiver bind cpu %d\n", g_config.sender_cpu_id);
-
-    set_cpu_affinity(g_config.receiver_cpu_id);
-  }
-
-  task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
-
-  assert(batch != NULL);
-
-  uint64_t total_recv = 0;
-
-  int bs = g_config.batch_size;
-
-  struct timespec start, end;
-
-  if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
-    perror("receiver clock_gettime");
-    exit(EXIT_FAILURE);
-  }
-  for (int iter = 0; iter < g_config.loop_time; iter++) {
-    int expect_magic = 0, recv = 0;
-    while (recv < ep->packet_cnt) {
-      int current_bs =
-          bs < (ep->packet_cnt - recv) ? bs : (ep->packet_cnt - recv);
-
-      int ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
-      recv += ret;
-      total_recv += ret;
-      // sanity check
-      for (int i = 0; i < ret; i++) {
-        assert(batch[i].magic == expect_magic);
-        expect_magic++;
-      }
-    }
-  }
-
-  if (clock_gettime(CLOCK_MONOTONIC, &end) == -1) {
-    perror("receiver clock_gettime");
-    exit(EXIT_FAILURE);
-  }
-
-  uint64_t ns_elapsed =
-      (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-  double receive_pps = (double)(1e9 * total_recv) / (double)ns_elapsed;
-  printf("receive pps=%.2f kpps=%.2f\n", receive_pps, receive_pps / 1000.0);
-}
-
-int main(int argc, char const *argv[]) {
-  parse_cli_option(argc, argv);
-
+// ensure that g_config is correctly init before calling init_all
+endpoint *get_recv_endpoint() {
   endpoint *ep = endpoint_create();
-
   assert(ep != NULL);
-
   int ret = fork();
 
   assert(ret != -1);
 
   if (ret == 0) {
+    if (g_config.sender_cpu_id != -1) {
+      printf("sender bind cpu %d\n", g_config.sender_cpu_id);
+      set_cpu_affinity(g_config.sender_cpu_id);
+    }
+
     sender(ep);
-  } else {
-    receiver(ep);
-    int status;
-    pid_t pid = wait(&status);
-    assert(pid != -1);
-    assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
+    endpoint_free(ep);
+    exit(EXIT_SUCCESS);
   }
 
-  endpoint_free(ep);
-  return 0;
+  if (g_config.receiver_cpu_id != -1) {
+    printf("receiver bind cpu %d\n", g_config.receiver_cpu_id);
+
+    set_cpu_affinity(g_config.receiver_cpu_id);
+  }
+  ep->send_proc_pid = ret;
+
+  return ep;
+}
+
+void clean_up_recv_endpoint(endpoint *receive_endpoint) {
+  int status;
+  pid_t pid = waitpid(receive_endpoint->send_proc_pid, &status, 0);
+  assert(pid != -1);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
 }
