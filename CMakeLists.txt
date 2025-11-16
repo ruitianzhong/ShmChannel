@@ -41,6 +41,7 @@ add_executable(test_single_request ./src/test/test_single_request.c
 add_executable(send_recv ./src/example.c ./src/send_recv.c ${CMAKE_SOURCE_DIR}/src/send_recv.h ${SHM_CHANNEL_SOURCES})
 
 target_link_libraries(send_recv PRIVATE ${PCAP_LIB})
+target_link_libraries(send_recv PRIVATE m)
 
 execute_process( COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/src/script ${CMAKE_CURRENT_BINARY_DIR}/script)
 

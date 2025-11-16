@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <pcap.h>
 #include <sched.h>
@@ -26,6 +27,8 @@ struct config g_config = {
     .sender_cpu_id = -1,
     .receiver_cpu_id = -1,
     .enable_ip_rewrite = 0,
+    .seed = 42,
+    .dist_type = "exp",
 };
 
 #define MAKE_IP_ADDR(a, b, c, d) \
@@ -135,6 +138,40 @@ void debug_pcap(endpoint *ep) {
   return;
 }
 
+void random_init(unsigned int seed) { srand(seed); }
+
+double exponetial_random(double lambda) {
+  assert(lambda > 0);
+  double u;
+  do {
+    u = (double)rand() / (RAND_MAX + 1.0);
+  } while (u == 0.0);
+
+  return -log(u) / lambda;
+}
+
+void endpoint_init_relative_send_ts(endpoint* ep) {
+  if (g_config.send_pps <= 0) {
+    return;
+  }
+  ep->send_us_timestamp =
+      calloc(ep->packet_cnt * g_config.loop_time, sizeof(double));
+  assert(ep->send_us_timestamp != NULL);
+  double start = 0.0;
+  double lambda = 1 / (1E6 / g_config.send_pps);
+  for (int i = 0; i < ep->packet_cnt * g_config.loop_time; i++) {
+    start += exponetial_random(lambda);
+    ep->send_us_timestamp[i] = start;
+  }
+}
+
+void endpoint_destroy_relative_send_ts(endpoint* ep) {
+  if (g_config.send_pps <= 0) {
+    return;
+  }
+  free(ep->send_us_timestamp);
+}
+
 endpoint *endpoint_create() {
   endpoint *ep = (endpoint *)calloc(sizeof(endpoint), 1);
 
@@ -152,6 +189,8 @@ endpoint *endpoint_create() {
 
   load_pcap_packet(ep);
 
+  endpoint_init_relative_send_ts(ep);
+
   return ep;
 }
 
@@ -162,6 +201,7 @@ void endpoint_free(endpoint *ep) {
   }
   free(ep->packet_info);
   shm_channel_close(ep->chan);
+  endpoint_destroy_relative_send_ts(ep);
   free(ep);
 }
 
