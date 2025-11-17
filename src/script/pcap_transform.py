@@ -1,3 +1,4 @@
+#! /bin/env python3
 import argparse
 from scapy.layers.inet import IP, UDP, TCP
 from scapy.layers.http import HTTPRequest, HTTP
@@ -20,7 +21,7 @@ def generate_random_ipv4_addr():
 
 
 def check_if_tcp_or_udp(pkt):
-    return pkt.haslayer(TCP) or pkt.haslayer(UDP)
+    return pkt.haslayer(IP) and pkt.haslayer(TCP) or pkt.haslayer(UDP)
 
 
 def generate_single_flow_template_pcap():
@@ -81,32 +82,52 @@ def generate_packet_from_template_flow(pkts, num_flows):
 
 
 class Endpoint:
-    def __init__(self, ip, port, proto):
+    def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.proto = proto
 
     def __eq__(self, other):
-        return self.ip == other.ip and self.port == other.port and self.proto == other.proto
+        return self.ip == other.ip and self.port == other.port
 
     def __str__(self):
-        return f"ip={self.ip},port={self.port},proto={self.proto} "
+        return f"ip={self.ip},port={self.port}"
+
+    def __lt__(self, other):
+        if self.ip < other.ip:
+            return True
+        elif self.ip > other.ip:
+            return False
+
+        if self.port < other.port:
+            return True
+
+        return False
 
 
 class EndpointPair:
-    def __init__(self, ep_a: Endpoint, ep_b: Endpoint):
+    def __init__(self, ep_a: Endpoint, ep_b: Endpoint, proto: str):
         if ep_a < ep_b:
             self.ep1 = ep_a
             self.ep2 = ep_b
         else:
             self.ep1 = ep_b
             self.ep2 = ep_a
+        self.proto = proto
 
     def __hash__(self):
-        return hash(str(self.ep1)+" "+str(self.ep2))
+        return hash(str(self.ep1)+" "+str(self.ep2)+" "+self.proto)
 
     def __eq__(self, other):
-        return self.ep1 == other.ep1 and self.ep2 == other.ep2
+        return self.ep1 == other.ep1 and self.ep2 == other.ep2 and self.proto == other.proto
+    
+
+
+def add_flow_dict(flow_dict: dict, ep_pair: EndpointPair, pkt):
+    if ep_pair not in flow_dict:
+        flow_dict[ep_pair] = {"pkts": [pkt], "cur_idx": 0}
+    else:
+        flow_dict[ep_pair]['pkts'].append(pkt)
+    
 
 
 def construct_flow_from_template_pcap(template_pkts, num_flows, consecutive_packets):
@@ -118,14 +139,59 @@ def construct_flow_from_template_pcap(template_pkts, num_flows, consecutive_pack
     for pkt in template_pkts:
         if not check_if_tcp_or_udp(pkt):
             continue
-
+        ip_layer = pkt.getlayer(IP)
+        src_ip, dst_ip = ip_layer.src, ip_layer.dst
         if pkt.haslayer(TCP):
-            pass
+            tcp_layer = pkt.getlayer(TCP)
+            proto = "TCP"
+            src_port = tcp_layer.sport
+            dst_port = tcp_layer.dport
         elif pkt.haslayer(UDP):
-            pass
+            udp_layer = pkt.getlayer(UDP)
+            proto = "UDP"
+            src_port = udp_layer.sport
+            dst_port = udp_layer.dport
         else:
             raise "Not supported packet"
+        
+        src_endpoint, dst_endpoint = Endpoint(
+            src_ip, src_port), Endpoint(dst_ip, dst_port)
+        
+        pair = EndpointPair(src_endpoint, dst_endpoint, proto)
 
+        if proto == "TCP":
+            add_flow_dict(tcp_flow_dict, pair, pkt)
+        elif proto =="UDP":
+            add_flow_dict(udp_flow_dict, pair, pkt)
+        
+        add_flow_dict(all_flow_dict, pair, pkt)
+        
+    tcp_flows = list(tcp_flow_dict.values())
+    udp_flows = list(udp_flow_dict.values())
+    pkts_list = []
+
+    for wnd_idx in range((len(tcp_flows)+num_flows)//num_flows):
+        wnd_left = wnd_idx*num_flows
+        wnd_right = min((wnd_idx+1)*num_flows, len(tcp_flows))
+
+        tcp_subflows = tcp_flows[wnd_left:wnd_right]
+
+        while True:
+            found = False
+            for tcp_flow in tcp_subflows:
+                for _ in range(consecutive_packets):
+                    cur = tcp_flow['cur_idx']
+                    if len(tcp_flow['pkts']) == cur:
+                        break
+
+                    found = True
+                    pkts_list.append(tcp_flow['pkts'][cur])
+                    tcp_flow['cur_idx'] = cur+1
+            if not found:
+                break
+
+    return pkts_list
+    
 
 if __name__ == "__main__":
     random.seed(42)
@@ -134,6 +200,9 @@ if __name__ == "__main__":
                         help="pcap file name of the template flow", type=str, default=None)
     parser.add_argument(
         "--num-flow", help="number of the flow in the generated pcap", type=int, default=4)
+    parser.add_argument(
+        '--consecutive-packets', type=int, default=4
+    )
     parser.add_argument(
         "--output", help="output file name", default="transformed.pcap", type=str
     )
@@ -145,6 +214,9 @@ if __name__ == "__main__":
     else:
         template = generate_single_flow_template_pcap()
 
-    result = generate_packet_from_template_flow(
-        template, num_flows=args.num_flow)
+    # result = generate_packet_from_template_flow(
+    #     template, num_flows=args.num_flow)
+
+    result = construct_flow_from_template_pcap(
+        template_pkts=template, num_flows=args.num_flow, consecutive_packets=args.consecutive_packets)
     wrpcap(args.output, result)
