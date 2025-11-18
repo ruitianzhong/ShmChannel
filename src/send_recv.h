@@ -46,6 +46,7 @@ struct endpoint {
   int packet_cnt;
   pid_t send_proc_pid;
   double* send_us_timestamp;
+  double* timings;
 };
 
 typedef struct endpoint endpoint;

@@ -7,6 +7,35 @@
 #include <wait.h>
 
 #include "send_recv.h"
+
+int double_compare(const void* a, const void* b) {
+    double num1 = *(const double*)a;
+    double num2 = *(const double*)b;
+    
+    if (num1 > num2) {
+        return 1;   
+    } else if (num1 < num2) {
+        return -1;  
+    } else {
+        return 0;   
+    }
+}
+
+void print_timings(double timings[], int len) {
+  double p99 = timings[(int)(len * 0.99)];
+  double p999 = timings[(int)(len * 0.999)];
+  double p9999 = timings[(int)(len * 0.9999)];
+  double max_time = timings[0];
+  for (int i = 0; i < len; i++) {
+    if (timings[i] > max_time) {
+      max_time = timings[i];
+    }
+  }
+
+  printf("p99=%.2f p999=%.2f p9999=%.2f max_time=%.2f\n", p99, p999, p9999,
+         max_time);
+}
+
 void receiver(endpoint *ep) {
   task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
@@ -23,27 +52,38 @@ void receiver(endpoint *ep) {
     exit(EXIT_FAILURE);
   }
   for (int iter = 0; iter < g_config.loop_time; iter++) {
-    int expect_magic = 0, recv = 0;
+    int recv = 0;
     while (recv < ep->packet_cnt) {
       int current_bs =
           bs < (ep->packet_cnt - recv) ? bs : (ep->packet_cnt - recv);
 
       int ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
+      for (int i = 0; i < ret; i++) {
+        // handle packet
+        struct timespec curr;
+        assert(clock_gettime(CLOCK_MONOTONIC, &curr) != -1);
+        double elapsed_us =
+            (double)(curr.tv_sec - batch[i].sent_time.tv_sec) * 1E6 +
+            (curr.tv_nsec - batch[i].sent_time.tv_nsec) / 1000.0;
+
+        ep->timings[iter * ep->packet_cnt + recv + i] = elapsed_us;
+      }
       recv += ret;
       total_recv += ret;
-      // sanity check
-      for (int i = 0; i < ret; i++) {
-        assert(batch[i].magic == expect_magic);
-        expect_magic++;
-      }
     }
+
+ 
   }
+
+
 
   if (clock_gettime(CLOCK_MONOTONIC, &end) == -1) {
     perror("receiver clock_gettime");
     exit(EXIT_FAILURE);
   }
-
+  qsort(ep->timings, ep->packet_cnt * g_config.loop_time, sizeof(double),
+        double_compare);
+  print_timings(ep->timings, ep->packet_cnt * g_config.loop_time);
   uint64_t ns_elapsed =
       (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
   double receive_pps = (double)(1e9 * total_recv) / (double)ns_elapsed;

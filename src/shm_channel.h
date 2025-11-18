@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <time.h>
 #ifndef __SHM_CHANNEL__
 #define __SHM_CHANNEL__
 #define SHM_MAGIC_NUMBER 0x2025
@@ -11,6 +12,8 @@ struct task_descriptor {
   // set by caller
   void* start_addr;
   int len;
+
+  struct timespec sent_time;
 };
 
 typedef struct task_descriptor task_descriptor;
