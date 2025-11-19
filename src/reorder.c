@@ -41,19 +41,22 @@ reorder_module* reorder_module_init(endpoint* ep) {
   return module;
 }
 
-static int flow_key_equal(const reorder_flow_key* a,
-                          const reorder_flow_key* b) {
-  return (a->protocol == b->protocol && a->src_ip == b->src_ip &&
-          a->dst_ip == b->dst_ip && a->src_port == b->src_port &&
-          a->dst_port == b->dst_port);
-}
+// static int flow_key_equal(const reorder_flow_key* a,
+//                           const reorder_flow_key* b) {
+//   return (a->protocol == b->protocol && a->src_ip == b->src_ip &&
+//           a->dst_ip == b->dst_ip && a->src_port == b->src_port &&
+//           a->dst_port == b->dst_port);
+// }
 
 static int extract_flow_key(const uint8_t* packet_data, size_t packet_len,
                             reorder_flow_key* key) {
+  assert(packet_len > 14);
+  packet_data += 14;
+  packet_len -= 14;
   struct ip* ip_header;
   struct tcphdr* tcp_header;
   struct udphdr* udp_header;
-  int ip_header_len;
+  size_t ip_header_len;
 
   if (packet_len < sizeof(struct ip)) {
     fprintf(stderr, "packet len is too short\n");
@@ -99,17 +102,17 @@ static int extract_flow_key(const uint8_t* packet_data, size_t packet_len,
   return 0;
 }
 
-static void print_flow(const reorder_flow_key* key) {
-  char src_ip_str[INET_ADDRSTRLEN];
-  char dst_ip_str[INET_ADDRSTRLEN];
+// static void print_flow(const reorder_flow_key* key) {
+//   char src_ip_str[INET_ADDRSTRLEN];
+//   char dst_ip_str[INET_ADDRSTRLEN];
 
-  inet_ntop(AF_INET, key->src_ip, src_ip_str, INET_ADDRSTRLEN);
-  inet_ntop(AF_INET, key->dst_ip, dst_ip_str, INET_ADDRSTRLEN);
+//   inet_ntop(AF_INET, key->src_ip, src_ip_str, INET_ADDRSTRLEN);
+//   inet_ntop(AF_INET, key->dst_ip, dst_ip_str, INET_ADDRSTRLEN);
 
-  printf("流信息: %s:%d -> %s:%d, 协议: %s", src_ip_str, ntohs(key->src_port),
-         dst_ip_str, ntohs(key->dst_port),
-         key->protocol == IPPROTO_TCP ? "TCP" : "UDP");
-}
+//   printf("流信息: %s:%d -> %s:%d, 协议: %s", src_ip_str, ntohs(key->src_port),
+//          dst_ip_str, ntohs(key->dst_port),
+//          key->protocol == IPPROTO_TCP ? "TCP" : "UDP");
+// }
 // FNV-1a
 static uint64_t reorder_calculate_flow_hash(reorder_flow_key* key) {
   uint32_t src_ip = key->src_ip, dst_ip = key->dst_ip;
@@ -169,10 +172,11 @@ static int reorder_dispatch_to_queue(reorder_queue_group* group,
   }
 
   q->pkts[q->tail] = *pkt;
-  q->tail++;
+  q->tail = (q->tail + 1) % q->len;
   if (q->tail == q->head) {
     q->is_full = 1;
   }
+  return 0;
 }
 
 int reorder_dispatch(reorder_module* m, task_descriptor* pkt) {
@@ -215,8 +219,8 @@ int reorder_group_schedule(reorder_queue_group* grp, task_descriptor* descs,
   return idx;
 }
 
-void reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
-                          int batch_size) {
+int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
+                         int batch_size) {
   // read the
   int res = 0;
   while (m->overflow_cur_len > 0) {
@@ -231,8 +235,9 @@ void reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
         (m->overflow_queue_head + 1) % (m->overflow_queue_len);
     m->overflow_cur_len--;
   }
+  int overflow_avail = m->overflow_queue_len - m->overflow_cur_len;
 
-  int bs = m->overflow_cur_len < 32 ? m->overflow_cur_len : 32;
+  int bs = overflow_avail < 32 ? overflow_avail : 32;
 
   int num_recv = shm_channel_recv_burst(m->ep->chan, m->pkt_buf, bs);
 

@@ -29,6 +29,7 @@ struct config g_config = {
     .enable_ip_rewrite = 0,
     .seed = 42,
     .dist_type = "exp",
+    .enable_reorder = 0,
 };
 
 #define MAKE_IP_ADDR(a, b, c, d) \

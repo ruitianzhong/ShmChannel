@@ -31,6 +31,8 @@ struct config {
   char* dist_type;
   // seed for random number for the reproducibility
   unsigned int seed;
+  // enable_reorder
+  int enable_reorder;
 };
 
 struct packet_info {

@@ -6,19 +6,20 @@
 #include <time.h>
 #include <wait.h>
 
+#include "reorder.h"
 #include "send_recv.h"
 
 int double_compare(const void* a, const void* b) {
-    double num1 = *(const double*)a;
-    double num2 = *(const double*)b;
-    
-    if (num1 > num2) {
-        return 1;   
-    } else if (num1 < num2) {
-        return -1;  
-    } else {
-        return 0;   
-    }
+  double num1 = *(const double*)a;
+  double num2 = *(const double*)b;
+
+  if (num1 > num2) {
+    return 1;
+  } else if (num1 < num2) {
+    return -1;
+  } else {
+    return 0;
+  }
 }
 
 void print_timings(double timings[], int len) {
@@ -36,8 +37,15 @@ void print_timings(double timings[], int len) {
          max_time);
 }
 
-void receiver(endpoint *ep) {
-  task_descriptor *batch = calloc(g_config.batch_size, sizeof(task_descriptor));
+static reorder_module* reorder_m = NULL;
+
+void receiver(endpoint* ep) {
+  
+  task_descriptor* batch = calloc(g_config.batch_size, sizeof(task_descriptor));
+
+  if (g_config.enable_reorder){
+    reorder_m = reorder_module_init(ep);
+  }
 
   assert(batch != NULL);
 
@@ -56,8 +64,12 @@ void receiver(endpoint *ep) {
     while (recv < ep->packet_cnt) {
       int current_bs =
           bs < (ep->packet_cnt - recv) ? bs : (ep->packet_cnt - recv);
-
-      int ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
+      int ret = 0;
+      if (g_config.enable_reorder) {
+        ret = reorder_receive_pkts(reorder_m, batch, current_bs);
+      } else {
+        ret = shm_channel_recv_burst(ep->chan, batch, current_bs);
+      }
       for (int i = 0; i < ret; i++) {
         // handle packet
         struct timespec curr;
@@ -71,16 +83,13 @@ void receiver(endpoint *ep) {
       recv += ret;
       total_recv += ret;
     }
-
- 
   }
-
-
 
   if (clock_gettime(CLOCK_MONOTONIC, &end) == -1) {
     perror("receiver clock_gettime");
     exit(EXIT_FAILURE);
   }
+  printf("experiment done. Process the data\n");
   qsort(ep->timings, ep->packet_cnt * g_config.loop_time, sizeof(double),
         double_compare);
   print_timings(ep->timings, ep->packet_cnt * g_config.loop_time);
@@ -90,7 +99,7 @@ void receiver(endpoint *ep) {
   printf("receive pps=%.2f kpps=%.2f\n", receive_pps, receive_pps / 1000.0);
 }
 
-void parse_cli_option(int argc, char const *argv[]) {
+void parse_cli_option(int argc, char const* argv[]) {
   if (argc == 1) {
     return;
   }
@@ -132,6 +141,9 @@ void parse_cli_option(int argc, char const *argv[]) {
                idx + 1 < argc) {
       g_config.enable_ip_rewrite = atoi(argv[idx + 1]);
       idx += 2;
+    } else if (strcmp(argv[idx], "--enable-reorder") == 0 && idx + 1 < argc) {
+      g_config.enable_reorder = atoi(argv[idx + 1]);
+      idx += 2;
     } else {
       printf("wrong option %s\n", argv[idx]);
       exit(EXIT_FAILURE);
@@ -139,10 +151,10 @@ void parse_cli_option(int argc, char const *argv[]) {
   }
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char const* argv[]) {
   parse_cli_option(argc, argv);
   // sender process is created automatically
-  endpoint *recv_ep = get_recv_endpoint();
+  endpoint* recv_ep = get_recv_endpoint();
   assert(recv_ep != NULL);
   receiver(recv_ep);
   clean_up_recv_endpoint(recv_ep);

@@ -1,5 +1,5 @@
 #ifndef __REORDER_H
-
+#include <send_recv.h>
 #define __REORDER_H
 
 typedef struct {
@@ -41,5 +41,9 @@ typedef struct {
   int current_group;
 
 } reorder_module;
+
+reorder_module* reorder_module_init(endpoint* ep);
+int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
+                         int batch_size);
 
 #endif
