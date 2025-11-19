@@ -24,4 +24,22 @@ typedef struct {
   int queue_len;
 } reorder_queue_group;
 
+typedef struct {
+  reorder_queue_group* tcp_queue_group;
+  reorder_queue_group* udp_queue_group;
+
+  task_descriptor* overflow_queue;
+  int overflow_queue_len;
+  int overflow_queue_head;
+  int overflow_queue_tail;
+  int overflow_cur_len;
+
+  endpoint* ep;
+
+  task_descriptor pkt_buf[32];
+
+  int current_group;
+
+} reorder_module;
+
 #endif

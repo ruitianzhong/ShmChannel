@@ -30,22 +30,6 @@ reorder_queue_group* reorder_queue_group_create(int batch_size, int q_len) {
   return group;
 }
 
-typedef struct {
-  reorder_queue_group* tcp_queue_group;
-  reorder_queue_group* udp_queue_group;
-
-  task_descriptor* overflow_queue;
-  int overflow_queue_len;
-  int overflow_queue_head;
-  int overflow_queue_tail;
-  int overflow_cur_len;
-
-  endpoint* ep;
-
-  task_descriptor pkt_buf[32];
-
-} reorder_module;
-
 reorder_module* reorder_module_init(endpoint* ep) {
   reorder_module* module = calloc(1, sizeof(reorder_module));
   int batch_size = 8, q_len = 16, overflow_queue_len = 32;
@@ -210,6 +194,27 @@ int reorder_dispatch(reorder_module* m, task_descriptor* pkt) {
   return res;
 }
 
+int reorder_group_schedule(reorder_queue_group* grp, task_descriptor* descs,
+                           int batch_size) {
+  int idx = 0;
+  for (int i = 0; i < grp->num_queue && idx < batch_size; i++) {
+    reorder_queue* q = &grp->queues[i];
+    if (!q->is_full && q->head == q->tail) {
+      continue;
+    }
+
+    descs[idx] = q->pkts[q->head];
+
+    q->head = (q->head + 1) % q->len;
+    if (q->is_full) {
+      q->is_full = 0;
+    }
+    ++idx;
+  }
+
+  return idx;
+}
+
 void reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
                           int batch_size) {
   // read the
@@ -243,5 +248,19 @@ void reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
     }
   }
 
-  // TODO: now schedule one batch for the receiver
+  // now schedule one batch for the receiver
+  for (int i = 0; i < 2; i++) {
+    if (m->current_group == 0) {
+      res = reorder_group_schedule(m->tcp_queue_group, descs, batch_size);
+    } else {
+      res = reorder_group_schedule(m->udp_queue_group, descs, batch_size);
+    }
+
+    if (res == 0) {
+      m->current_group = (m->current_group + 1) % 2;
+    } else {
+      break;
+    }
+  }
+  return res;
 }
