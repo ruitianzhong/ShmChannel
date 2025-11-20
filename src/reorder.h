@@ -45,5 +45,6 @@ typedef struct {
 reorder_module* reorder_module_init(endpoint* ep);
 int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
                          int batch_size);
+void reorder_module_free(reorder_module* m);
 
 #endif

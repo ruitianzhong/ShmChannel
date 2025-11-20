@@ -14,7 +14,11 @@
 #include "send_recv.h"
 #include "shm_channel.h"
 
-reorder_queue_group* reorder_queue_group_create(int batch_size, int q_len) {
+static uint64_t g_total_pkts = 0;
+static uint64_t g_total_cnt = 0;
+
+static reorder_queue_group* reorder_queue_group_create(int batch_size,
+                                                       int q_len) {
   reorder_queue_group* group = calloc(1, sizeof(reorder_queue_group));
 
   reorder_queue* rq = calloc(batch_size, sizeof(reorder_queue));
@@ -30,6 +34,15 @@ reorder_queue_group* reorder_queue_group_create(int batch_size, int q_len) {
   return group;
 }
 
+static void reorder_queue_group_free(reorder_queue_group* group) {
+  for (int i = 0; i < group->num_queue; i++) {
+    free(group->queues[i].pkts);
+  }
+
+  free(group->queues);
+  free(group);
+}
+
 reorder_module* reorder_module_init(endpoint* ep) {
   reorder_module* module = calloc(1, sizeof(reorder_module));
   int batch_size = 8, q_len = 16, overflow_queue_len = 32;
@@ -39,6 +52,16 @@ reorder_module* reorder_module_init(endpoint* ep) {
   module->overflow_queue = calloc(overflow_queue_len, sizeof(task_descriptor));
   module->ep = ep;
   return module;
+}
+
+void reorder_module_free(reorder_module* m) {
+  reorder_queue_group_free(m->tcp_queue_group);
+  reorder_queue_group_free(m->udp_queue_group);
+  free(m->overflow_queue);
+  free(m);
+
+  printf("[reorder module] average batch_size=%.2f\n",
+         (double)g_total_pkts / (double)g_total_cnt);
 }
 
 // static int flow_key_equal(const reorder_flow_key* a,
@@ -266,6 +289,10 @@ int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
     } else {
       break;
     }
+  }
+  if (res > 0) {
+    g_total_cnt++;
+    g_total_pkts += res;
   }
   return res;
 }

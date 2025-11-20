@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <wait.h>
 
 #include "reorder.h"
@@ -40,10 +41,9 @@ void print_timings(double timings[], int len) {
 static reorder_module* reorder_m = NULL;
 
 void receiver(endpoint* ep) {
-  
   task_descriptor* batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
-  if (g_config.enable_reorder){
+  if (g_config.enable_reorder) {
     reorder_m = reorder_module_init(ep);
   }
 
@@ -97,6 +97,10 @@ void receiver(endpoint* ep) {
       (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
   double receive_pps = (double)(1e9 * total_recv) / (double)ns_elapsed;
   printf("receive pps=%.2f kpps=%.2f\n", receive_pps, receive_pps / 1000.0);
+
+  if (g_config.enable_reorder) {
+    reorder_module_free(reorder_m);
+  }
 }
 
 void parse_cli_option(int argc, char const* argv[]) {
@@ -152,6 +156,7 @@ void parse_cli_option(int argc, char const* argv[]) {
 }
 
 int main(int argc, char const* argv[]) {
+  printf("sender process pid %d\n", getpid());
   parse_cli_option(argc, argv);
   // sender process is created automatically
   endpoint* recv_ep = get_recv_endpoint();
