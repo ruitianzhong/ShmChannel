@@ -30,6 +30,8 @@ struct config g_config = {
     .seed = 42,
     .dist_type = "exp",
     .enable_reorder = 0,
+    .interactive = 0,
+    .service_time_us = 0,
 };
 
 #define MAKE_IP_ADDR(a, b, c, d) \

@@ -45,7 +45,7 @@ static void reorder_queue_group_free(reorder_queue_group* group) {
 
 reorder_module* reorder_module_init(endpoint* ep) {
   reorder_module* module = calloc(1, sizeof(reorder_module));
-  int batch_size = 8, q_len = 16, overflow_queue_len = 32;
+  int batch_size = 16, q_len = 16, overflow_queue_len = 32;
   module->tcp_queue_group = reorder_queue_group_create(batch_size, q_len);
   module->udp_queue_group = reorder_queue_group_create(batch_size, q_len);
   module->overflow_queue_len = overflow_queue_len;

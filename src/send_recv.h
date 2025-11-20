@@ -33,6 +33,10 @@ struct config {
   unsigned int seed;
   // enable_reorder
   int enable_reorder;
+  //
+  int interactive;
+
+  int service_time_us;
 };
 
 struct packet_info {

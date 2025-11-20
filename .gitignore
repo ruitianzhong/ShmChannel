@@ -2,3 +2,5 @@ build
 .vscode
 *.pcap
 *.o
+*.data
+*.data.old

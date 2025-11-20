@@ -9,6 +9,7 @@
 
 #include "reorder.h"
 #include "send_recv.h"
+// ./send_recv --pcap-file-path packet.pcap --pps 0  --queue-depth 1024 --batch-size 32 --loop-time 50 --enable-reorder 1 --service-time-us 20  --interactive 1
 
 int double_compare(const void* a, const void* b) {
   double num1 = *(const double*)a;
@@ -39,6 +40,30 @@ void print_timings(double timings[], int len) {
 }
 
 static reorder_module* reorder_m = NULL;
+
+static inline void busy_wait(uint64_t ns) {
+  if (ns == 0) {
+    return;
+  }
+
+  struct timespec start, end;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+    perror("busy_wait clock_gettime");
+    exit(EXIT_FAILURE);
+  }
+  uint64_t delta = 0;
+
+  do {
+    if (clock_gettime(CLOCK_MONOTONIC, &end) == -1) {
+      perror("busy_wait clock_gettime");
+      exit(EXIT_FAILURE);
+    }
+
+    delta = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+  } while (delta < ns);
+}
 
 void receiver(endpoint* ep) {
   task_descriptor* batch = calloc(g_config.batch_size, sizeof(task_descriptor));
@@ -72,6 +97,10 @@ void receiver(endpoint* ep) {
       }
       for (int i = 0; i < ret; i++) {
         // handle packet
+        if (g_config.service_time_us > 0) {
+          busy_wait(g_config.service_time_us * 1000);
+        }
+
         struct timespec curr;
         assert(clock_gettime(CLOCK_MONOTONIC, &curr) != -1);
         double elapsed_us =
@@ -148,6 +177,12 @@ void parse_cli_option(int argc, char const* argv[]) {
     } else if (strcmp(argv[idx], "--enable-reorder") == 0 && idx + 1 < argc) {
       g_config.enable_reorder = atoi(argv[idx + 1]);
       idx += 2;
+    } else if (strcmp(argv[idx], "--service-time-us") == 0 && idx + 1 < argc) {
+      g_config.service_time_us = atoi(argv[idx + 1]);
+      idx += 2;
+    } else if (strcmp(argv[idx], "--interactive") == 0 && idx + 1 < argc) {
+      g_config.interactive = atoi(argv[idx + 1]);
+      idx += 2;
     } else {
       printf("wrong option %s\n", argv[idx]);
       exit(EXIT_FAILURE);
@@ -157,6 +192,13 @@ void parse_cli_option(int argc, char const* argv[]) {
 
 int main(int argc, char const* argv[]) {
   printf("sender process pid %d\n", getpid());
+
+  int x = 0;
+  if (g_config.interactive) {
+    scanf("%d", &x);
+  }
+
+  printf("start the experiment\n");
   parse_cli_option(argc, argv);
   // sender process is created automatically
   endpoint* recv_ep = get_recv_endpoint();
