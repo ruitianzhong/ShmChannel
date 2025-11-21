@@ -125,17 +125,17 @@ static int extract_flow_key(const uint8_t* packet_data, size_t packet_len,
   return 0;
 }
 
-// static void print_flow(const reorder_flow_key* key) {
-//   char src_ip_str[INET_ADDRSTRLEN];
-//   char dst_ip_str[INET_ADDRSTRLEN];
+static void print_flow(const reorder_flow_key* key) {
+  char src_ip_str[INET_ADDRSTRLEN];
+  char dst_ip_str[INET_ADDRSTRLEN];
 
-//   inet_ntop(AF_INET, key->src_ip, src_ip_str, INET_ADDRSTRLEN);
-//   inet_ntop(AF_INET, key->dst_ip, dst_ip_str, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, &key->src_ip, src_ip_str, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, &key->dst_ip, dst_ip_str, INET_ADDRSTRLEN);
 
-//   printf("流信息: %s:%d -> %s:%d, 协议: %s", src_ip_str, ntohs(key->src_port),
-//          dst_ip_str, ntohs(key->dst_port),
-//          key->protocol == IPPROTO_TCP ? "TCP" : "UDP");
-// }
+  printf("流信息: %s:%d -> %s:%d, 协议: %s ", src_ip_str, ntohs(key->src_port),
+         dst_ip_str, ntohs(key->dst_port),
+         key->protocol == IPPROTO_TCP ? "TCP" : "UDP");
+}
 // FNV-1a
 static uint64_t reorder_calculate_flow_hash(reorder_flow_key* key) {
   uint32_t src_ip = key->src_ip, dst_ip = key->dst_ip;
@@ -145,7 +145,7 @@ static uint64_t reorder_calculate_flow_hash(reorder_flow_key* key) {
   uint64_t hash = 0xcbf29ce484222325ULL;
   const uint64_t fnv_prime = 0x100000001b3ULL;
   if (src_ip > dst_ip || (src_ip == dst_ip && src_port > dst_port)) {
-    uint16_t temp_ip = src_ip;
+    uint32_t temp_ip = src_ip;
     src_ip = dst_ip;
     dst_ip = temp_ip;
 
@@ -293,6 +293,15 @@ int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
   if (res > 0) {
     g_total_cnt++;
     g_total_pkts += res;
+#ifdef REORDER_DEBUG
+    printf("Batch %ld ret=%d\n", g_total_cnt - 1, res);
+    for (int i = 0; i < res; i++) {
+      reorder_flow_key key;
+      extract_flow_key(descs[i].start_addr, descs[i].len, &key);
+      print_flow(&key);
+    }
+    printf("\n\n");
+#endif
   }
   return res;
 }

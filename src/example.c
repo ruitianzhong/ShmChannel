@@ -194,12 +194,13 @@ int main(int argc, char const* argv[]) {
   printf("sender process pid %d\n", getpid());
 
   int x = 0;
+
+  parse_cli_option(argc, argv);
   if (g_config.interactive) {
     scanf("%d", &x);
   }
 
   printf("start the experiment\n");
-  parse_cli_option(argc, argv);
   // sender process is created automatically
   endpoint* recv_ep = get_recv_endpoint();
   assert(recv_ep != NULL);
