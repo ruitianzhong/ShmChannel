@@ -124,7 +124,7 @@ static int extract_flow_key(const uint8_t* packet_data, size_t packet_len,
 
   return 0;
 }
-
+#ifdef REORDER_DEBUG
 static void print_flow(const reorder_flow_key* key) {
   char src_ip_str[INET_ADDRSTRLEN];
   char dst_ip_str[INET_ADDRSTRLEN];
@@ -136,6 +136,7 @@ static void print_flow(const reorder_flow_key* key) {
          dst_ip_str, ntohs(key->dst_port),
          key->protocol == IPPROTO_TCP ? "TCP" : "UDP");
 }
+#endif
 // FNV-1a
 static uint64_t reorder_calculate_flow_hash(reorder_flow_key* key) {
   uint32_t src_ip = key->src_ip, dst_ip = key->dst_ip;
