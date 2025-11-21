@@ -22,6 +22,7 @@ typedef struct {
   reorder_queue* queues;
   int num_queue;
   int queue_len;
+  int current_queue_idx;
 } reorder_queue_group;
 
 typedef struct {

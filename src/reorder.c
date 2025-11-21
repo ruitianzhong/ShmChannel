@@ -226,8 +226,9 @@ int reorder_group_schedule(reorder_queue_group* grp, task_descriptor* descs,
                            int batch_size) {
   int idx = 0;
   for (int i = 0; i < grp->num_queue && idx < batch_size; i++) {
-    reorder_queue* q = &grp->queues[i];
+    reorder_queue* q = &grp->queues[grp->current_queue_idx];
     if (!q->is_full && q->head == q->tail) {
+      grp->current_queue_idx = (grp->current_queue_idx + 1) % grp->num_queue;
       continue;
     }
 
@@ -238,6 +239,7 @@ int reorder_group_schedule(reorder_queue_group* grp, task_descriptor* descs,
       q->is_full = 0;
     }
     ++idx;
+    grp->current_queue_idx = (grp->current_queue_idx + 1) % grp->num_queue;
   }
 
   return idx;
