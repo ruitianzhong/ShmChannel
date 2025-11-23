@@ -261,21 +261,25 @@ int reorder_receive_pkts(reorder_module* m, task_descriptor* descs,
         (m->overflow_queue_head + 1) % (m->overflow_queue_len);
     m->overflow_cur_len--;
   }
-  int overflow_avail = m->overflow_queue_len - m->overflow_cur_len;
 
-  int bs = overflow_avail < 32 ? overflow_avail : 32;
+  // enforce packet order requirement here
+  if (m->overflow_cur_len == 0) {
+    int overflow_avail = m->overflow_queue_len - m->overflow_cur_len;
 
-  int num_recv = shm_channel_recv_burst(m->ep->chan, m->pkt_buf, bs);
+    int bs = overflow_avail < 32 ? overflow_avail : 32;
 
-  for (int i = 0; i < num_recv; i++) {
-    task_descriptor* pkt = &m->pkt_buf[i];
-    res = reorder_dispatch(m, pkt);
-    if (res != 0) {
-      assert(m->overflow_cur_len < m->overflow_queue_len);
-      m->overflow_cur_len++;
-      m->overflow_queue[m->overflow_queue_tail] = *pkt;
-      m->overflow_queue_tail =
-          (m->overflow_queue_tail + 1) % m->overflow_queue_len;
+    int num_recv = shm_channel_recv_burst(m->ep->chan, m->pkt_buf, bs);
+
+    for (int i = 0; i < num_recv; i++) {
+      task_descriptor* pkt = &m->pkt_buf[i];
+      res = reorder_dispatch(m, pkt);
+      if (res != 0) {
+        assert(m->overflow_cur_len < m->overflow_queue_len);
+        m->overflow_cur_len++;
+        m->overflow_queue[m->overflow_queue_tail] = *pkt;
+        m->overflow_queue_tail =
+            (m->overflow_queue_tail + 1) % m->overflow_queue_len;
+      }
     }
   }
 
