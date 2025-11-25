@@ -69,7 +69,7 @@ void receiver(endpoint* ep) {
   task_descriptor* batch = calloc(g_config.batch_size, sizeof(task_descriptor));
 
   if (g_config.enable_reorder) {
-    reorder_m = reorder_module_init(ep);
+    reorder_m = reorder_module_init(ep, 4096, 1024, 4096);
   }
 
   assert(batch != NULL);

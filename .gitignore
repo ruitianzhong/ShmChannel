@@ -4,3 +4,4 @@ build
 *.o
 *.data
 *.data.old
+*.svg
