@@ -295,7 +295,7 @@ void sender(endpoint* ep) {
   struct timespec start_time;
 
   assert(clock_gettime(CLOCK_MONOTONIC, &start_time) != -1);
-
+  int magic = 0;
   for (int iter = 0; iter < g_config.loop_time; iter++) {
     int sent = 0;
     while (sent < ep->packet_cnt) {
@@ -325,7 +325,9 @@ void sender(endpoint* ep) {
         if (sent && g_config.enable_ip_rewrite) {
           rewrite_src_ip(batch[i].start_addr, batch[i].len);
         }
+        batch[i].magic = i + magic;
       }
+      magic += current_batch;
 
       int idx = 0;
 

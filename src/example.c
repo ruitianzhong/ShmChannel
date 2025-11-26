@@ -28,15 +28,20 @@ void print_timings(double timings[], int len) {
   double p99 = timings[(int)(len * 0.99)];
   double p999 = timings[(int)(len * 0.999)];
   double p9999 = timings[(int)(len * 0.9999)];
+  double p50 = timings[(int)(len * 0.5)];
   double max_time = timings[0];
+  double sum = 0.0;
   for (int i = 0; i < len; i++) {
     if (timings[i] > max_time) {
       max_time = timings[i];
     }
+    sum += timings[i];
   }
 
-  printf("p99=%.2f p999=%.2f p9999=%.2f max_time=%.2f\n", p99, p999, p9999,
-         max_time);
+  double avg = sum / (double)len;
+
+  printf("p50=%.2f p99=%.2f p999=%.2f p9999=%.2f max_time=%.2f avg=%.2f\n", p50,
+         p99, p999, p9999, max_time, avg);
 }
 
 static reorder_module* reorder_m = NULL;
@@ -84,6 +89,9 @@ void receiver(endpoint* ep) {
     perror("receiver clock_gettime");
     exit(EXIT_FAILURE);
   }
+#ifdef MAGIC_VERIFY
+  int expect_magic = 0;
+#endif
   for (int iter = 0; iter < g_config.loop_time; iter++) {
     int recv = 0;
     while (recv < ep->packet_cnt) {
@@ -108,6 +116,16 @@ void receiver(endpoint* ep) {
             (curr.tv_nsec - batch[i].sent_time.tv_nsec) / 1000.0;
 
         ep->timings[iter * ep->packet_cnt + recv + i] = elapsed_us;
+#ifdef MAGIC_VERIFY
+
+        if (batch[i].magic != expect_magic) {
+          printf("%d %d i=%d received=%d cur_bs=%d\n", batch[i].magic,
+                 expect_magic, i, ret, current_bs);
+        }
+        assert(batch[i].magic == expect_magic);
+        expect_magic++;
+
+#endif
       }
       recv += ret;
       total_recv += ret;
@@ -197,6 +215,7 @@ int main(int argc, char const* argv[]) {
 
   parse_cli_option(argc, argv);
   if (g_config.interactive) {
+    printf("receiver pid=%d\nPlease enter a number: ", getpid());
     scanf("%d", &x);
   }
 

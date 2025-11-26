@@ -73,6 +73,33 @@ def generate_multi_bidirectional_flows(num_flows, num_pkts_per_flow):
     return pkts
 
 
+def generate_tcp_udp_mix_flow(num_flows, num_pkts_per_flow):
+    pkts = []
+
+    for flow_idx in range(num_flows):
+        src_ip = generate_random_ip()
+        dst_ip = generate_random_ip()
+        src_port = random.randint(1024, 65535)
+        dst_port = random.randint(1024, 65535)
+
+        for pkt_idx in range(num_pkts_per_flow):
+            eth = Ether(src=SRC_MAC, dst=DST_MAC)
+            ip = IP(src=src_ip, dst=dst_ip)
+            tcp = TCP(sport=src_port, dport=dst_port)
+            pkt = eth / ip / tcp
+
+            pkts.append(pkt)
+
+            eth = Ether(src=SRC_MAC, dst=DST_MAC)
+            ip = IP(src=src_ip, dst=dst_ip)
+            udp = UDP(sport=src_port, dport=dst_port)
+
+            pkt = eth / ip / udp
+
+            pkts.append(pkt)
+    wrpcap("mix_flow.pcap", pkts)
+    return pkts
+
 def store_packets_to_pcap_file(args, packets_list):
     print("Store the generated packets to synthetic_packets.pcap")
     print(f"Total packets: {len(packets_list)}")
@@ -113,4 +140,6 @@ if __name__ == "__main__":
     print(f"Total time: {(end_time - start_time) / 1000 / 1000} ms")
 
     generate_multi_bidirectional_flows(num_flows=args.num_flows,
-                         num_pkts_per_flow=args.packet_per_flow)
+                                       num_pkts_per_flow=args.packet_per_flow)
+    generate_tcp_udp_mix_flow(num_flows=args.num_flows,
+                              num_pkts_per_flow=args.packet_per_flow)

@@ -83,6 +83,8 @@ static reorder_ht_entry* allocate_ht_entry(reorder_hashtable* ht) {
   reorder_ht_entry* ret = ht->free_list_head.next;
   ht->free_list_head.next = ret->next;
   ret->next = NULL;
+  ret->queue.head = NULL;
+  ret->queue.tail = NULL;
   return ret;
 }
 
@@ -133,7 +135,7 @@ void hashtable_delete(reorder_hashtable* ht, reorder_flow_key* key) {
     if (flow_key_equal(key, &p->queue.key)) {
       // reorder_flow_queue* fq = &p->queue;
       if (prev == NULL) {
-        ht->buckets[idx] = NULL;
+        ht->buckets[idx] = p->next;
       } else {
         prev->next = p->next;
       }
@@ -395,9 +397,9 @@ int reorder_dispatch(reorder_module* m, reorder_packet* pkt) {
 
 int reorder_group_schedule(reorder_module* m, reorder_queue_group* grp,
                            task_descriptor* descs, int batch_size) {
-  reorder_flow_queue *head = grp->head, *tail = grp->tail;
+  reorder_flow_queue* tail = grp->tail;
   int cnt = 0;
-  while (head && cnt < batch_size) {
+  while (grp->head && cnt < batch_size) {
     reorder_flow_queue* cur = reorder_queue_group_remove_first(grp);
     reorder_packet* pkt = flow_queue_delete_first(cur);
     if (pkt != NULL) {
