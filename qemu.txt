@@ -1,0 +1,13 @@
+{ "execute": "qmp_capabilities" }
+{ "execute": "query-status" }
+{ "execute" : "stop"}
+{ "execute" : "cont"}
+{ "execute":"migrate-set-capabilities", "arguments":{"capabilities":[{"capability": "x-ignore-shared","state": true}]}} 
+{"execute": "migrate","arguments":{"uri":"exec:cat>vm_state"}}
+
+{"execute":"migrate-incoming","arguments":{"uri":"exec:cat vm_state"}}
+{"execute": "query-migrate"}
+{ "execute": "system_powerdown" }
+{ "execute": "quit" }
+
+
