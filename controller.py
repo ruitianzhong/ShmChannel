@@ -5,8 +5,8 @@ PTY Controller - 为多个容器启动独立的load_config.py进程
 
 import sys
 import subprocess
-import time
 import os
+from datetime import datetime
 
 def main():
     if len(sys.argv) < 2:
@@ -20,47 +20,64 @@ def main():
     print(f"为 {len(container_names)} 个容器启动配置进程...")
     
     processes = []
+    log_dir = "logs"
+    
+    # 创建日志目录
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        print(f"创建日志目录: {log_dir}")
     
     # 为每个容器启动独立的load_config.py进程
     for container_name in container_names:
-        cmd = [sys.executable, "./load_config.py", "--name", container_name]
+        cmd = ["python", "./pty_control.py", "--name", container_name]
+        
+        # 生成日志文件名（包含时间戳）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stdout_log = os.path.join(log_dir, f"{container_name}_{timestamp}_stdout.log")
+        stderr_log = os.path.join(log_dir, f"{container_name}_{timestamp}_stderr.log")
         
         print(f"启动容器 '{container_name}': {' '.join(cmd)}")
+        print(f"  stdout -> {stdout_log}")
+        print(f"  stderr -> {stderr_log}")
         
         try:
-            # 启动子进程
+            # 打开日志文件
+            stdout_file = open(stdout_log, 'w')
+            stderr_file = open(stderr_log, 'w')
+            
+            # 启动子进程，重定向输出到文件
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=stdout_file,
+                stderr=stderr_file,
                 text=True,
                 bufsize=1
             )
-            processes.append((container_name, process))
+            processes.append((container_name, process, stdout_file, stderr_file))
             
         except Exception as e:
             print(f"启动容器 '{container_name}' 失败: {e}")
+            # 关闭已打开的文件
+            if 'stdout_file' in locals():
+                stdout_file.close()
+            if 'stderr_file' in locals():
+                stderr_file.close()
     
     print(f"\n已启动 {len(processes)} 个进程")
     print("等待所有进程完成...")
     print("-" * 40)
     
     # 等待所有进程完成
-    for container_name, process in processes:
+    for container_name, process, stdout_file, stderr_file in processes:
         print(f"等待容器 '{container_name}' 完成...")
         
-        # 读取并输出进程的stdout和stderr
-        stdout, stderr = process.communicate()
+        # 等待进程完成
+        return_code = process.wait()
         
-        if stdout:
-            print(f"[{container_name} stdout]:")
-            print(stdout)
+        # 关闭日志文件
+        stdout_file.close()
+        stderr_file.close()
         
-        if stderr:
-            print(f"[{container_name} stderr]:")
-            print(stderr)
-        
-        return_code = process.returncode
         if return_code == 0:
             print(f"容器 '{container_name}' 完成成功")
         else:
