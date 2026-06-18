@@ -84,12 +84,16 @@ def main():
 
     procs.sort(key=lambda x: x[2], reverse=True)
 
+    top_procs = procs[:args.top]
+    total = sum(mem for _, _, mem in top_procs)
+
     print(f"{'Rank':<6}{'PID':<10}{'Process':<48}{'Anon (MiB)':>12}")
     print("-" * 76)
-    for i, (pid, name, mem) in enumerate(procs[:args.top], 1):
-        # Truncate long cmdline for display
+    for i, (pid, name, mem) in enumerate(top_procs, 1):
         display_name = (name[:45] + "...") if len(name) > 48 else name
         print(f"{i:<6}{pid:<10}{display_name:<48}{mem:>10.2f}")
+    print("-" * 76)
+    print(f"{'Total':<6}{'':<10}{'':<48}{total:>10.2f}")
 
 
 if __name__ == "__main__":
