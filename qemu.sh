@@ -165,3 +165,15 @@ qemu-system-x86_64 \
 -netdev tap,ifname=tap29,id=net29,vhost=on \
 -device virtio-net-pci,netdev=net29,bus=pcie.30,addr=0x0,mac=52:54:00:00:01:1d,mq=4
 
+
+qemu-system-x86_64 \
+    -enable-kvm \
+    -m 2048 \
+    -smp 4 \
+    -drive file=vm.qcow2,if=virtio \
+    -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+    -device virtio-net-pci,netdev=net0,mac=52:54:00:00:00:01 \
+    -device pci-bridge,id=pci_bridge1,bus=pci.0,chassis_nr=1,shpc=off \
+    -netdev tap,id=net1,ifname=tap1,script=no,downscript=no \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x0,netdev=net1,mac=52:54:00:00:01:01
+
