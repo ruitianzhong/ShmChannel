@@ -177,3 +177,109 @@ qemu-system-x86_64 \
     -netdev tap,id=net1,ifname=tap1,script=no,downscript=no \
     -device virtio-net-pci,bus=pci_bridge1,addr=0x0,netdev=net1,mac=52:54:00:00:01:01
 
+    qemu-system-x86_64 \
+    -enable-kvm -m 1024 \
+    -drive file=vm.qcow2,if=virtio \
+    \
+    # 定义2个PCI桥
+    -device pci-bridge,id=pci_bridge1,bus=pci.0,chassis_nr=1,shpc=off \
+    -device pci-bridge,id=pci_bridge2,bus=pci.0,chassis_nr=2,shpc=off \
+    \
+    # ========== 桥1：前16张网卡 net0 ~ net15 (addr 0x0 ~ 0xf) ==========
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x0,netdev=net0,mac=52:54:00:00:00:01 \
+    \
+    -netdev user,id=net1 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x1,netdev=net1,mac=52:54:00:00:00:02 \
+    \
+    -netdev user,id=net2 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x2,netdev=net2,mac=52:54:00:00:00:03 \
+    \
+    -netdev user,id=net3 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x3,netdev=net3,mac=52:54:00:00:00:04 \
+    \
+    -netdev user,id=net4 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x4,netdev=net4,mac=52:54:00:00:00:05 \
+    \
+    -netdev user,id=net5 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x5,netdev=net5,mac=52:54:00:00:00:06 \
+    \
+    -netdev user,id=net6 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x6,netdev=net6,mac=52:54:00:00:00:07 \
+    \
+    -netdev user,id=net7 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x7,netdev=net7,mac=52:54:00:00:00:08 \
+    \
+    -netdev user,id=net8 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x8,netdev=net8,mac=52:54:00:00:00:09 \
+    \
+    -netdev user,id=net9 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0x9,netdev=net9,mac=52:54:00:00:00:0a \
+    \
+    -netdev user,id=net10 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xa,netdev=net10,mac=52:54:00:00:00:0b \
+    \
+    -netdev user,id=net11 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xb,netdev=net11,mac=52:54:00:00:00:0c \
+    \
+    -netdev user,id=net12 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xc,netdev=net12,mac=52:54:00:00:00:0d \
+    \
+    -netdev user,id=net13 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xd,netdev=net13,mac=52:54:00:00:00:0e \
+    \
+    -netdev user,id=net14 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xe,netdev=net14,mac=52:54:00:00:00:0f \
+    \
+    -netdev user,id=net15 \
+    -device virtio-net-pci,bus=pci_bridge1,addr=0xf,netdev=net15,mac=52:54:00:00:00:10 \
+    \
+    # ========== 桥2：后16张网卡 net16 ~ net31 (addr 0x0 ~ 0xf) ==========
+    -netdev user,id=net16 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x0,netdev=net16,mac=52:54:00:00:01:01 \
+    \
+    -netdev user,id=net17 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x1,netdev=net17,mac=52:54:00:00:01:02 \
+    \
+    -netdev user,id=net18 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x2,netdev=net18,mac=52:54:00:00:01:03 \
+    \
+    -netdev user,id=net19 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x3,netdev=net19,mac=52:54:00:00:01:04 \
+    \
+    -netdev user,id=net20 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x4,netdev=net20,mac=52:54:00:00:01:05 \
+    \
+    -netdev user,id=net21 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x5,netdev=net21,mac=52:54:00:00:01:06 \
+    \
+    -netdev user,id=net22 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x6,netdev=net22,mac=52:54:00:00:01:07 \
+    \
+    -netdev user,id=net23 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x7,netdev=net23,mac=52:54:00:00:01:08 \
+    \
+    -netdev user,id=net24 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x8,netdev=net24,mac=52:54:00:00:01:09 \
+    \
+    -netdev user,id=net25 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0x9,netdev=net25,mac=52:54:00:00:01:0a \
+    \
+    -netdev user,id=net26 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xa,netdev=net26,mac=52:54:00:00:01:0b \
+    \
+    -netdev user,id=net27 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xb,netdev=net27,mac=52:54:00:00:01:0c \
+    \
+    -netdev user,id=net28 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xc,netdev=net28,mac=52:54:00:00:01:0d \
+    \
+    -netdev user,id=net29 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xd,netdev=net29,mac=52:54:00:00:01:0e \
+    \
+    -netdev user,id=net30 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xe,netdev=net30,mac=52:54:00:00:01:0f \
+    \
+    -netdev user,id=net31 \
+    -device virtio-net-pci,bus=pci_bridge2,addr=0xf,netdev=net31,mac=52:54:00:00:01:10
+
