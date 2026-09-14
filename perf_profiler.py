@@ -31,17 +31,17 @@ import matplotlib.pyplot as plt  # noqa: F401  (保留，供需要时扩展)
 
 
 class PerfProfiler:
-    def __init__(self, perf_data_path: str = "perf.data", freq: int | None = None):
+    def __init__(self, perf_data_path="perf.data", freq=None):
         """perf_data_path: perf.data 落盘位置；freq: 采样频率(Hz)。"""
         self.perf_data_path = perf_data_path
         self.freq = freq
-        self._proc: subprocess.Popen | None = None
+        self._proc = None
         self._running = False
 
     # ------------------------------------------------------------------ #
     # 采集控制
     # ------------------------------------------------------------------ #
-    def start(self) -> None:
+    def start(self):
         """后台启动 `perf record -a -g`，立即返回，不阻塞主线程。"""
         if self._running:
             raise RuntimeError("已经在采集中，请先 stop()。")
@@ -51,16 +51,16 @@ class PerfProfiler:
         cmd = ["perf", "record", "-a", "-g", "-o", self.perf_data_path]
         if self.freq:
             cmd += ["-F", str(self.freq)]
-        # 必须让 perf 读到自己的 stdin，否则 SIGINT 无法送达
+        # stdin 用 DEVNULL：perf 不需要我们喂 stdin，SIGINT 走信号而不是管道
         self._proc = subprocess.Popen(
             cmd,
-            stdin=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
         self._running = True
 
-    def stop(self, block: bool = False) -> Future:
+    def stop(self, block=False):
         """向 perf 发送 SIGINT 收尾并等待数据写盘。
 
         返回 Future；采集最终化在后台线程进行，不阻塞调用方。
@@ -71,7 +71,7 @@ class PerfProfiler:
         if self._proc is None:
             raise RuntimeError("内部状态异常。")
 
-        fut: Future = Future()
+        fut = Future()
         proc = self._proc
         self._running = False
 
@@ -79,7 +79,6 @@ class PerfProfiler:
             try:
                 # perf record 收到 SIGINT 后优雅停止并写入数据
                 proc.send_signal(signal.SIGINT)
-                proc.stdin.close()  # type: ignore[union-attr]
                 _, err = proc.communicate(timeout=120)
                 if proc.returncode not in (0, 130):
                     fut.set_exception(RuntimeError(
@@ -104,10 +103,10 @@ class PerfProfiler:
     # ------------------------------------------------------------------ #
     def plot_flamegraph(
         self,
-        flamegraph_dir: str | None = None,
-        output_svg: str = "flamegraph.svg",
-        block: bool = False,
-    ) -> Future:
+        flamegraph_dir=None,
+        output_svg="flamegraph.svg",
+        block=False,
+    ):
         """生成火焰图。
 
         flamegraph_dir: FlameGraph 工具目录（含 flamegraph.pl /
@@ -116,7 +115,7 @@ class PerfProfiler:
         返回的 Future.result() 为最终 SVG 路径。
         """
         fold, flame = self._locate_tools(flamegraph_dir)
-        fut: Future = Future()
+        fut = Future()
 
         def _build():
             try:
@@ -134,7 +133,7 @@ class PerfProfiler:
     # 符号统计 / Top-N 条形图
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _parse_symbol_table(text: str) -> list[tuple[float, str]]:
+    def _parse_symbol_table(text):
         """解析 `perf report --sort=symbol` 的文本输出为 (overhead%, 符号) 列表。"""
         rows = []
         for line in text.splitlines():
@@ -157,7 +156,7 @@ class PerfProfiler:
             rows.append((pct_f, symbol))
         return rows
 
-    def _report_symbols(self) -> list[tuple[float, str]]:
+    def _report_symbols(self):
         """跑 `perf report --sort=symbol` 并返回 (overhead%, 符号) 列表。"""
         cmd = ["perf", "report", "-i", self.perf_data_path,
                "--stdio", "--sort=symbol", "--no-header"]
@@ -173,17 +172,17 @@ class PerfProfiler:
 
     def plot_top_functions(
         self,
-        n: int = 15,
-        title: str = "Top 函数 CPU 占比",
-        save_path: str | None = None,
-        block: bool = False,
-    ) -> Future:
+        n=15,
+        title="Top 函数 CPU 占比",
+        save_path=None,
+        block=False,
+    ):
         """绘制 Top-N 函数 CPU 占比条形图（matplotlib）。
 
         数据来自 perf report 的按符号汇总；耗时在后台线程，不阻塞主线程。
         返回 Future，其中 .result() 为 (fig, ax) 或 save_path；block=True 同步。
         """
-        fut: Future = Future()
+        fut = Future()
 
         def _build():
             try:
@@ -221,7 +220,7 @@ class PerfProfiler:
     # 内部实现
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _locate_tools(flamegraph_dir: str | None):
+    def _locate_tools(flamegraph_dir=None):
         """定位 stackcollapse-perf.pl 和 flamegraph.pl。"""
         candidates = []
         if flamegraph_dir:
@@ -246,7 +245,7 @@ class PerfProfiler:
             )
         return fold, flame
 
-    def _run_pipeline(self, fold_pl: str, flame_pl: str, output_svg: str) -> str:
+    def _run_pipeline(self, fold_pl, flame_pl, output_svg):
         """perf script | stackcollapse-perf.pl | flamegraph.pl > output.svg。"""
         script = ["perf", "script", "-i", self.perf_data_path]
         p1 = subprocess.Popen(
