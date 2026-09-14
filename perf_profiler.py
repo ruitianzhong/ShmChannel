@@ -131,6 +131,93 @@ class PerfProfiler:
         return fut
 
     # ------------------------------------------------------------------ #
+    # 符号统计 / Top-N 条形图
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _parse_symbol_table(text: str) -> list[tuple[float, str]]:
+        """解析 `perf report --sort=symbol` 的文本输出为 (overhead%, 符号) 列表。"""
+        rows = []
+        for line in text.splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            parts = [p for p in line.split("  ") if p.strip()]
+            if len(parts) < 4:
+                continue
+            pct = parts[0].rstrip("%")
+            try:
+                pct_f = float(pct)
+            except ValueError:
+                continue
+            symbol = parts[-1].strip()
+            # 去掉 "[.] "/"[k] " 前缀
+            for marker in ("[.]", "[k]"):
+                if symbol.startswith(marker):
+                    symbol = symbol[len(marker):].lstrip()
+                    break
+            rows.append((pct_f, symbol))
+        return rows
+
+    def _report_symbols(self) -> list[tuple[float, str]]:
+        """跑 `perf report --sort=symbol` 并返回 (overhead%, 符号) 列表。"""
+        cmd = ["perf", "report", "-i", self.perf_data_path,
+               "--stdio", "--sort=symbol", "--no-header"]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if out.returncode != 0:
+            raise RuntimeError(
+                f"perf report 失败 rc={out.returncode}: "
+                f"{out.stderr[:500]}")
+        rows = self._parse_symbol_table(out.stdout)
+        if not rows:
+            raise RuntimeError("perf report 没有解析到任何符号。")
+        return rows
+
+    def plot_top_functions(
+        self,
+        n: int = 15,
+        title: str = "Top 函数 CPU 占比",
+        save_path: str | None = None,
+        block: bool = False,
+    ) -> Future:
+        """绘制 Top-N 函数 CPU 占比条形图（matplotlib）。
+
+        数据来自 perf report 的按符号汇总；耗时在后台线程，不阻塞主线程。
+        返回 Future，其中 .result() 为 (fig, ax) 或 save_path；block=True 同步。
+        """
+        fut: Future = Future()
+
+        def _build():
+            try:
+                rows = self._report_symbols()[:n]
+                names = [f"{name}" for _, name in rows]
+                pcts = [p for p, _ in rows]
+
+                fig, ax = plt.subplots(figsize=(9, max(3, n * 0.35)))
+                ax.barh(range(len(pcts)), pcts, color="#1f77b4")
+                ax.set_yticks(range(len(pcts)))
+                ax.set_yticklabels(names)
+                ax.invert_yaxis()
+                ax.set_xlabel("CPU 占比 (%)")
+                ax.set_title(title)
+                ax.grid(True, axis="x", linestyle="--", alpha=0.4)
+                for i, v in enumerate(pcts):
+                    ax.text(v, i, f" {v:.1f}%", va="center", fontsize=8)
+                fig.tight_layout()
+
+                if save_path:
+                    fig.savefig(save_path, dpi=120)
+                    plt.close(fig)
+                    fut.set_result(save_path)
+                else:
+                    fut.set_result((fig, ax))
+            except Exception as e:  # noqa: BLE001
+                fut.set_exception(e)
+
+        threading.Thread(target=_build, daemon=True).start()
+        if block:
+            fut.result()
+        return fut
+
+    # ------------------------------------------------------------------ #
     # 内部实现
     # ------------------------------------------------------------------ #
     @staticmethod
