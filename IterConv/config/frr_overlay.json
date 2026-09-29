@@ -1,0 +1,30 @@
+{
+  "vm1": {
+    "underlay": "192.168.0.2",
+    "loopback": "10.0.3.1/32",
+    "adv_base": "10.0.3",
+    "asn": 65001,
+    "peers": [
+      { "name": "vm2", "frr_ip": "10.0.0.1", "peer_frr": "10.0.0.2", "peer_asn": 65002 }
+    ]
+  },
+  "vm2": {
+    "underlay": "192.168.0.6",
+    "loopback": "10.0.4.1/32",
+    "adv_base": "10.0.4",
+    "asn": 65002,
+    "peers": [
+      { "name": "vm1", "frr_ip": "10.0.0.2", "peer_frr": "10.0.0.1", "peer_asn": 65001 },
+      { "name": "vm3", "frr_ip": "10.0.1.1", "peer_frr": "10.0.1.2", "peer_asn": 65003 }
+    ]
+  },
+  "vm3": {
+    "underlay": "192.168.0.10",
+    "loopback": "10.0.5.1/32",
+    "adv_base": "10.0.5",
+    "asn": 65003,
+    "peers": [
+      { "name": "vm2", "frr_ip": "10.0.1.2", "peer_frr": "10.0.1.1", "peer_asn": 65002 }
+    ]
+  }
+}

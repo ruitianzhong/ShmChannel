@@ -1,0 +1,6 @@
+{
+  "quiescent_ms": 20000,
+  "first_boot_wait_ms": 30000,
+  "always_online": ["vm1"],
+  "sets": [ ["vm2"] ]
+}

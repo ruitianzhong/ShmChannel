@@ -1,0 +1,17 @@
+*.qcow2
+*.pcap
+id_rsa
+id_rsa.pub
+
+# 自动创建 VM 的磁盘目录(--create 生成, 可整体清理)
+disks/
+
+# 定制数据面运行时产物
+bin/
+build/
+controller.json
+controller.out
+*.tmp
+__pycache__/
+
+*.img
