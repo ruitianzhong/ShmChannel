@@ -14,4 +14,12 @@ controller.out
 *.tmp
 __pycache__/
 
+# gen_config 自动生成的可视化 HTML(top.html / topo_*.html)
+topo.html
+topo_*.html
+
+# gen_config 生成的拓扑配置目录(config/<sig>/, 可整体清理)
+config/line_*/
+config/fattree_*/
+
 *.img

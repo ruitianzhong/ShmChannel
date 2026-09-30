@@ -151,6 +151,50 @@ python3 vm.py \
 > 镜像内已部署并自启 vsock server（`scripts/vsock_server.py` + systemd，见 `scripts/vsock-setup.sh`）。
 > `--create` 的 VM 地址分配固定，`--frr-overlay` 的 `underlay`/名称需与之匹配。
 
+### 生成拓扑配置（gen_config.py）
+
+`gen_config.py` 从"拓扑描述"直接生成 vm.py 可用的两份 JSON（`frr_overlay.json` + `partition.json`），
+并**自动**在同一目录产出可视化 `topo.html`（`--no-vis` 关闭）。VM 规格无需手写（由 vm.py `--create` 自动创建）。
+
+```bash
+python3 config/gen_config.py line    -n N     # 线性拓扑 vm1-...-vmN
+python3 config/gen_config.py fattree -k K     # 经典 k-ary fat-tree(K 须为偶数)
+python3 config/gen_config.py line -n 6 --show-roles   # 打印节点-角色后退出
+```
+
+- **line**：节点角色 = 中心 `middle`、首 `head`、尾 `tail`、其余 `internal`。
+- **fattree**（Al-Fares 3 层）：core 节点标记 `core`，aggregation/edge 按所属 pod 标记 `pod1`..`podk`。
+- **默认分区**：line → `middle` 常在线、其余逐台轮换；fattree → 全部 `core` 常在线、**每个 pod 一组轮换**。
+  可 `--always-role <r>` / `--rotate-role <r>` 覆盖（保留角色 `any` = 全部节点，轮换时逐台）。
+- 产物写在 `config/<sig>/`（如 `config/fattree_k4/`），可用 `--out` 改目录；`topo.html` 已 gitignore。
+
+生成后即可运行（`--create` 自动建 VM）：
+
+```bash
+python3 vm.py --create --frr-overlay config/fattree_k4/frr_overlay.json \
+  [--iter-config config/fattree_k4/partition.json]
+```
+
+### 拓扑可视化（可选）
+
+把 `gen_config.py` 生成的 `frr_overlay.json` + `partition.json` 画成拓扑图：
+**常在线**节点蓝色，**每个轮换分区一个独立颜色**（浅/深色主题、hover 悬浮提示、节点清单表随附）。
+fat-tree 拓扑自动识别三层并分层绘制（core 在顶、聚合居中、edge 在下，同 pod 的 agg+edge 同列对齐）。
+
+```bash
+# 先由 gen_config 生成两份 JSON(config/<sig>/ 下), 如 k=4 的 fat-tree:
+python3 config/gen_config.py fattree -k 4
+# 再可视化:
+python3 scripts/vis_topology.py \
+  --frr-overlay config/fattree_k4/frr_overlay.json \
+  --partition  config/fattree_k4/partition.json \
+  --out topo.html
+```
+
+- 默认布局 `--layout auto`：路径拓扑按直线排、spine-leaf 双层、fat-tree 三层分层、其余圆形；
+  可 `--layout line|spine|fatree|circle` 覆盖。
+- 产出**自包含 HTML**（内联 SVG+CSS+JS，无外部依赖），浏览器直接打开即可。
+
 ### 选项说明
 
 - `--vm-spec`：VM 规格（镜像、tap、mac、host/vm ip、QMP socket），默认 `vm.py` 内置（两节点）；与 `--create` 互斥。
