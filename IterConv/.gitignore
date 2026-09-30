@@ -9,7 +9,7 @@ disks/
 # 定制数据面运行时产物
 bin/
 build/
-controller.json
+/controller.json
 controller.out
 *.tmp
 __pycache__/

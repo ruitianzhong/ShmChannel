@@ -1,0 +1,28 @@
+{
+  "listen_ip": "192.168.0.1",
+  "control_port": 9000,
+  "ctl_socket": "/tmp/controller.ctl",
+  "admin_default_online": [],
+  "routers": [
+    {
+      "id": 1,
+      "name": "vm1",
+      "vm_ip": "192.168.0.2",
+      "dial_ip": "192.168.0.1",
+      "frr_ip": "10.0.0.1"
+    },
+    {
+      "id": 2,
+      "name": "vm2",
+      "vm_ip": "192.168.0.6",
+      "dial_ip": "192.168.0.5",
+      "frr_ip": "10.0.0.2"
+    }
+  ],
+  "links": [
+    {
+      "ip_a": "10.0.0.1",
+      "ip_b": "10.0.0.2"
+    }
+  ]
+}
